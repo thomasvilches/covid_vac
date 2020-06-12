@@ -249,7 +249,7 @@ end
 ## now, running vaccine and herd immunity, focusing and not focusing in comorbidity, first  argument turns off vac
 function run_param(beta,ap_vac,vac_ef_v,vac_com_v,herd_im_v)
     for v_e = vac_ef_v,v_c = vac_com_v, h_i = herd_im_v
-        @everywhere ip = cv.ModelParameters(β=$beta, apply_vac = $ap_vac,apply_vac_com = $v_c, vaccine_ef = $v_e,herd = $(h_i),)
+        @everywhere ip = cv.ModelParameters(β=$beta, apply_vac = $ap_vac,apply_vac_com = $v_c, vaccine_ef = $v_e,herd = $(h_i))
         folder = create_folder(ip)
 
         println("$v_e $(ip.vaccine_ef)")

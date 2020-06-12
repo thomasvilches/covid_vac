@@ -239,7 +239,7 @@ end
 
 function create_folder(ip::cv.ModelParameters)
     strategy = ip.apply_vac_com == true ? "S1" : "S2"
-    RF = string("/data/thomas-covid/get_prop/results_prob_","$(replace(string(ip.β), "." => "_"))","_vac_","$(replace(string(ip.vaccine_ef), "." => "_"))","_herd_immu_","$(ip.herd)","_$strategy") ## 
+    RF = string("results_prob_","$(replace(string(ip.β), "." => "_"))","_vac_","$(replace(string(ip.vaccine_ef), "." => "_"))","_herd_immu_","$(ip.herd)","_$strategy") ## 
     if !Base.Filesystem.isdir(RF)
         Base.Filesystem.mkpath(RF)
     end
