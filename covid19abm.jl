@@ -42,7 +42,7 @@ end
     initialhi::Int64 = 0 ## initial herd immunity, inserts number of REC individuals
     τmild::Int64 = 0 ## days before they self-isolate for mild cases
     fmild::Float64 = 0.0  ## percent of people practice self-isolation
-    fsevere::Float64 = 0.0 # fixed at 0.80
+    fsevere::Float64 = 1.0 #
     eldq::Float64 = 0.0 ## complete isolation of elderly
     eldqag::Int8 = 5 ## default age group, if quarantined(isolated) is ag 5. 
     fpreiso::Float64 = 0.0 ## percent that is isolated at the presymptomatic stage
