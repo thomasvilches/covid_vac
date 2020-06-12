@@ -247,12 +247,12 @@ end
 
 
 ## now, running vaccine and herd immunity, focusing and not focusing in comorbidity, first  argument turns off vac
-function run_param(beta = 0.08,ap_vac = false,vac_ef_v = [0.0],vac_com_v = [false],herd_im_v = [0])
+function run_param(beta = 0.08,ap_vac = false,vac_ef_v = [0.0],vac_com_v = [false],herd_im_v = [0],nsims::Int64)
     for v_e = vac_ef_v,v_c = vac_com_v, h_i = herd_im_v
         @everywhere ip = cv.ModelParameters(β=$beta, apply_vac = $ap_vac,apply_vac_com = $v_c, vaccine_ef = $v_e,herd = $(h_i))
         folder = create_folder(ip)
 
         println("$v_e $(ip.vaccine_ef)")
-        run(ip,2,folder)
+        run(ip,nsims,folder)
     end
 end

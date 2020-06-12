@@ -253,6 +253,6 @@ function run_param(beta = 0.08,ap_vac = false,vac_ef_v = [0.0],vac_com_v = [fals
         folder = create_folder(ip)
 
         println("$v_e $(ip.vaccine_ef)")
-        run(ip,1000,folder)
+        run(ip,nsims,folder)
     end
 end
