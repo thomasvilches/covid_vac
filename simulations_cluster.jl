@@ -18,13 +18,13 @@ using DelimitedFiles
 
 #@everywhere using covid19abm
 
-addprocs(SlurmManager(250), N=9, topology=:master_worker, exeflags="--project=.")
+addprocs(SlurmManager(500), N=17, topology=:master_worker, exeflags="--project=.")
 @everywhere using Parameters, Distributions, StatsBase, StaticArrays, Random, Match, DataFrames
 @everywhere include("covid19abm.jl")
 @everywhere const cv=covid19abm
 
 
-function run(myp::cv.ModelParameters, nsims=500, folderprefix="./")
+function run(myp::cv.ModelParameters, nsims=1000, folderprefix="./")
     println("starting $nsims simulations...\nsave folder set to $(folderprefix)")
     dump(myp)
     myp.calibration && error("can not run simulation, calibration is on.")
@@ -67,8 +67,8 @@ function run(myp::cv.ModelParameters, nsims=500, folderprefix="./")
         println("saving dataframe time level: $k")
         # time level, save file per age group
         #yaf = compute_yearly_average(df)       
-        #fn = string("$(folderprefix)/timelevel_", k, ".dat")   
-        #CSV.write(fn, yaf)       
+       # fn = string("$(folderprefix)/timelevel_", k, ".dat")   
+       # CSV.write(fn, yaf)       
     end
 
     ##########Saving vaccine status
@@ -85,7 +85,7 @@ function run(myp::cv.ModelParameters, nsims=500, folderprefix="./")
 
     close(fv)=#
     #############saving vac ef
-    println("saving vac effcicacy")
+    #=println("saving vac effcicacy")
     vac_ef_file = string(folderprefix,"/vac_ef.dat")
     fve = open(vac_ef_file,"w")
    
@@ -96,7 +96,7 @@ function run(myp::cv.ModelParameters, nsims=500, folderprefix="./")
         println(fve,"")
     end
 
-    close(fve)
+    close(fve)=#
 
     #######saving commorbidity status
     #=println("saving commorbidity status")
@@ -123,15 +123,23 @@ function run(myp::cv.ModelParameters, nsims=500, folderprefix="./")
     n_icu_vac = [cdr[i].n_icu_vac for i=1:nsims]
     n_icu_nvac = [cdr[i].n_icu_nvac for i=1:nsims]
 
-    writedlm(string(folderprefix,"/general_vac_info.dat"),[n_vac_sus n_vac_rec n_inf_vac n_inf_nvac n_dead_vac n_dead_nvac n_hosp_vac n_hosp_nvac n_icu_vac n_icu_nvac])
+    writedlm(string(folderprefix,"/general_vac_info_cov_$(replace(string(myp.cov_val), "." => "_"))_vac_ef_$(replace(string(myp.vaccine_ef), "." => "_")).dat"),[n_vac_sus n_vac_rec n_inf_vac n_inf_nvac n_dead_vac n_dead_nvac n_hosp_vac n_hosp_nvac n_icu_vac n_icu_nvac])
 
+    writedlm(string(folderprefix,"/com_vac_cov_$(replace(string(myp.cov_val), "." => "_"))_vac_ef_$(replace(string(myp.vaccine_ef), "." => "_")).dat"),[cdr[i].com_v for i=1:nsims])
+    writedlm(string(folderprefix,"/com_total_cov_$(replace(string(myp.cov_val), "." => "_"))_vac_ef_$(replace(string(myp.vaccine_ef), "." => "_")).dat"),[cdr[i].com_t for i=1:nsims])
+    writedlm(string(folderprefix,"/ncom_vac_cov_$(replace(string(myp.cov_val), "." => "_"))_vac_ef_$(replace(string(myp.vaccine_ef), "." => "_")).dat"),[cdr[i].ncom_v for i=1:nsims])
+    writedlm(string(folderprefix,"/ncom_total_cov_$(replace(string(myp.cov_val), "." => "_"))_vac_ef_$(replace(string(myp.vaccine_ef), "." => "_")).dat"),[cdr[i].ncom_t for i=1:nsims])
+    
+#=
+    writedlm(string(folderprefix,"/general_vac_info.dat"),[n_vac_sus n_vac_rec n_inf_vac n_inf_nvac n_dead_vac n_dead_nvac n_hosp_vac n_hosp_nvac n_icu_vac n_icu_nvac])
     writedlm(string(folderprefix,"/com_vac.dat"),[cdr[i].com_v for i=1:nsims])
     writedlm(string(folderprefix,"/com_total.dat"),[cdr[i].com_t for i=1:nsims])
     writedlm(string(folderprefix,"/ncom_vac.dat"),[cdr[i].ncom_v for i=1:nsims])
     writedlm(string(folderprefix,"/ncom_total.dat"),[cdr[i].ncom_t for i=1:nsims])
+    =#
+    
     return mydfs
 end
-
 
 
 function compute_yearly_average(df)
@@ -239,7 +247,7 @@ end
 
 function create_folder(ip::cv.ModelParameters)
     strategy = ip.apply_vac_com == true ? "S1" : "S2"
-    RF = string("results_prob_","$(replace(string(ip.β), "." => "_"))","_vac_","$(replace(string(ip.vaccine_ef), "." => "_"))","_herd_immu_","$(ip.herd)","_$strategy") ## 
+    RF = string("/data/thomas-covid/heatmap/results_prob_","$(replace(string(ip.β), "." => "_"))","_vac_","$(replace(string(ip.vaccine_ef), "." => "_"))","_herd_immu_","$(ip.herd)","_$strategy") ## 
     if !Base.Filesystem.isdir(RF)
         Base.Filesystem.mkpath(RF)
     end
@@ -247,9 +255,9 @@ function create_folder(ip::cv.ModelParameters)
 end
 
 ## now, running vaccine and herd immunity, focusing and not focusing in comorbidity, first  argument turns off vac
-function run_param(beta = 0.08,ap_vac = false,vac_ef_v = [0.0],vac_com_v = [false],herd_im_v = [0],nsims::Int64)
-    for v_e = vac_ef_v,v_c = vac_com_v, h_i = herd_im_v
-        @everywhere ip = cv.ModelParameters(β=$beta, apply_vac = $ap_vac,apply_vac_com = $v_c, vaccine_ef = $v_e,herd = $(h_i))
+function run_param(beta = 0.08,ap_vac = false,vac_ef_v = [0.0],vac_com_v = [false],herd_im_v = [0],nsims=1000,cov_val_v=[0.0])
+    for v_e = vac_ef_v,v_c = vac_com_v, h_i = herd_im_v, covv = cov_val_v
+        @everywhere ip = cv.ModelParameters(β=$beta, apply_vac = $ap_vac,apply_vac_com = $v_c, vaccine_ef = $v_e,herd = $(h_i),cov_val = $(covv))
         folder = create_folder(ip)
 
         println("$v_e $(ip.vaccine_ef)")

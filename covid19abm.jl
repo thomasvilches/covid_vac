@@ -32,7 +32,7 @@ end
 
 ## default system parameters
 @with_kw mutable struct ModelParameters @deftype Float64    ## use @with_kw from Parameters
-    β = 0.062       
+    β = 0.08       
     seasonal::Bool = false ## seasonal betas or not
     popsize::Int64 = 10000
     prov::Symbol = :usa
@@ -60,7 +60,7 @@ end
     vac_com_dec_min::Float16 = 0.1 # how much the comorbidity decreases the vac eff
     herd::Int8 = 0 #typemax(Int32) ~ millions
     set_g_cov::Bool = false ###Given proportion for coverage
-    cov_val::Float64 = 0.8
+    cov_val::Float64 = 0.7
 end
 
 Base.@kwdef mutable struct ct_data_collect
@@ -85,7 +85,7 @@ export ModelParameters, HEALTH, Human, humans, BETAS
 
 function runsim(simnum, ip::ModelParameters)
     # function runs the `main` function, and collects the data as dataframes. 
-    hmatrix = main(ip)            
+    hmatrix = main(ip,simnum)            
     # get infectors counters
     infectors = _count_infectors()
 
@@ -184,8 +184,8 @@ function runsim(simnum, ip::ModelParameters)
 end
 export runsim
 
-function main(ip::ModelParameters)
-    #Random.seed!(sim*726)
+function main(ip::ModelParameters,sim::Int64)
+    Random.seed!(sim*726)
     ## datacollection            
     # matrix to collect model state for every time step
 
@@ -203,8 +203,8 @@ function main(ip::ModelParameters)
         insert_infected(PRE, p.initialinf, 4)
     else 
         insert_infected(LAT, p.initialinf, 4)
-        applying_vac()
-        herd_immu_dist()
+        applying_vac(sim)
+        herd_immu_dist(sim)
         #insert_infected(REC, p.initialhi, 4)
     end    
     
@@ -316,8 +316,8 @@ function _get_column_incidence(hmatrix, hcol)
     return timevec
 end
 
-function herd_immu_dist()
-    
+function herd_immu_dist(sim::Int64)
+    rng = MersenneTwister(200*sim)
     vec_n = zeros(Int32,5)
     if p.herd == 5
         vec_n = [15;132;249;72;29]
@@ -332,7 +332,7 @@ function herd_immu_dist()
         pos = findall(y->y.ag == g,humans)
         n_dist = min(length(pos),vec_n[g])
 
-        pos2 = sample(pos,n_dist,replace=false)
+        pos2 = sample(rng,pos,n_dist,replace=false)
 
         for i = pos2
             move_to_recovered(humans[i])
@@ -415,8 +415,8 @@ function comorbidity(ag::Int16)
 end
 export comorbidity
 
-function applying_vac()
-    
+function applying_vac(sim::Int64)
+    rng = MersenneTwister(100*sim)
     if p.apply_vac
         vac_age_thres = [4;12;17;49;64;999]
         vac_cov_ag = [0.70;0.63;0.52;0.338;0.473;0.681]
@@ -424,7 +424,7 @@ function applying_vac()
         n_vac::Int64 = 0
         for x = humans
             g = findfirst(y-> vac_age_thres[y] >= x.age,1:length(vac_age_thres))
-            if rand() < vac_cov_ag[g]
+            if rand(rng) < vac_cov_ag[g]
               n_vac += 1
               p_ct_pg[g] += 1.0
             end
@@ -439,7 +439,7 @@ function applying_vac()
                 for x = humans
                     if x.comorbidity == 1
                         x.vac_status = 1
-                        red_com = p.vac_com_dec_min+rand()*(p.vac_com_dec_max-p.vac_com_dec_min)
+                        red_com = p.vac_com_dec_min+rand(rng)*(p.vac_com_dec_max-p.vac_com_dec_min)
                         x.vac_ef = (1-red_com)*p.vaccine_ef
                         n_vac -= 1
                         if n_vac == 0
@@ -451,11 +451,11 @@ function applying_vac()
             end
 
             pos = findall(y->y.vac_status == 0,humans)
-            pos = sample(pos,n_vac,replace = false)
+            pos = sample(rng,pos,n_vac,replace = false)
             for i = pos
                 x = humans[i]
                 x.vac_status = 1
-                red_com = p.vac_com_dec_min+rand()*(p.vac_com_dec_max-p.vac_com_dec_min)
+                red_com = p.vac_com_dec_min+rand(rng)*(p.vac_com_dec_max-p.vac_com_dec_min)
                 x.vac_ef = (1-(red_com*x.comorbidity))*p.vaccine_ef
                 n_vac -= 1
             end
@@ -465,7 +465,7 @@ function applying_vac()
                 for x = humans
                     if x.comorbidity == 1
                         x.vac_status = 1
-                        red_com = p.vac_com_dec_min+rand()*(p.vac_com_dec_max-p.vac_com_dec_min)
+                        red_com = p.vac_com_dec_min+rand(rng)*(p.vac_com_dec_max-p.vac_com_dec_min)
                         x.vac_ef = (1-red_com)*p.vaccine_ef
                         n_vac -= 1
                         if n_vac == 0
@@ -480,11 +480,11 @@ function applying_vac()
                 Ng = Int.(round.(p_ct_pg/sum(p_ct_pg)*n_vac))
                 if sum(Ng) == 0 ###if it reaches here but sum(Ng) is 0, probably n_vac =1 or 2, so, just allocate these remain vaccines randomly
                     pos = findall(y-> y.vac_status == 0,humans)
-                    pos = sample(pos,n_vac,replace = false)
+                    pos = sample(rng,pos,n_vac,replace = false)
                     for i = pos
                         x = humans[i]
                         x.vac_status = 1
-                        red_com = p.vac_com_dec_min+rand()*(p.vac_com_dec_max-p.vac_com_dec_min)
+                        red_com = p.vac_com_dec_min+rand(rng)*(p.vac_com_dec_max-p.vac_com_dec_min)
                         x.vac_ef = (1-(red_com*x.comorbidity))*p.vaccine_ef
                         n_vac -= 1
                     end
@@ -492,14 +492,14 @@ function applying_vac()
                 g = 1 ##first age group 
                 pos = findall(y->y.age<=vac_age_thres[g] && y.vac_status == 0,humans)
                 if length(pos) > Ng[g]
-                    pos = sample(pos,Int(round(Ng[g])),replace = false)
+                    pos = sample(rng,pos,Int(round(Ng[g])),replace = false)
                 else
                     p_ct_pg[g] = 0.0
                 end
                 for i = pos
                     x = humans[i]
                     x.vac_status = 1
-                    red_com = p.vac_com_dec_min+rand()*(p.vac_com_dec_max-p.vac_com_dec_min)
+                    red_com = p.vac_com_dec_min+rand(rng)*(p.vac_com_dec_max-p.vac_com_dec_min)
                     x.vac_ef = (1-(red_com*x.comorbidity))*p.vaccine_ef
                     n_vac -= 1
                 end
@@ -508,14 +508,14 @@ function applying_vac()
                     
                     pos = findall(y->y.age>vac_age_thres[g-1] && y.age<=vac_age_thres[g] && y.vac_status == 0,humans)
                     if length(pos) > Ng[g]
-                        pos = sample(pos,Int(round(Ng[g])),replace = false)
+                        pos = sample(rng,pos,Int(round(Ng[g])),replace = false)
                     else
                         p_ct_pg[g] = 0.0
                     end
                     for i = pos
                         x = humans[i]
                         x.vac_status = 1
-                        red_com = p.vac_com_dec_min+rand()*(p.vac_com_dec_max-p.vac_com_dec_min)
+                        red_com = p.vac_com_dec_min+rand(rng)*(p.vac_com_dec_max-p.vac_com_dec_min)
                         x.vac_ef = (1-(red_com*x.comorbidity))*p.vaccine_ef
                         n_vac -= 1
                     end
@@ -773,7 +773,7 @@ function move_to_latent(x::Human)
     age_thres = [18, 59, 999]
     g = findfirst(y-> y >= x.age, age_thres)
      
-    x.swap = rand() < (symp_pcts[g]*(1-x.vac_ef)) ? PRE : ASYMP 
+    x.swap = rand() < (symp_pcts[g]) ? PRE : ASYMP 
     x.got_inf = true
     ## in calibration mode, latent people never become infectious.
     if p.calibration 
@@ -800,10 +800,10 @@ function move_to_pre(x::Human)
     x.tis = 0   # reset time in state 
     x.exp = x.dur[3] # get the presymptomatic period
 
-    if rand() < θ[x.ag]
-        x.swap = MILD
-    else 
+    if rand() < (1-θ[x.ag])*(1-x.vac_ef)
         x.swap = INF
+    else 
+        x.swap = MILD
     end
     # calculate whether person is isolated
     rand() < p.fpreiso && _set_isolation(x, true, :pi)
@@ -991,7 +991,7 @@ function apply_ct_strategy(y::Human)
          # in strategy 3, all traced individuals are isolated for only 4 days. 
          _set_isolation(y, true, :ct)
          iso = true
-         y.tracedxp = 4 ## trace isolation will last for 14 days before expiry                
+         y.tracedxp = 14 ## trace isolation will last for 14 days before expiry                
          ct_data.totalisolated += 1  ## update counter 
     end
     # count data
