@@ -43,7 +43,7 @@ end
     initialhi::Int64 = 0 ## initial herd immunity, inserts number of REC individuals
     τmild::Int64 = 0 ## days before they self-isolate for mild cases
     fmild::Float64 = 0.0  ## percent of people practice self-isolation
-    fsevere::Float64 = 1.0 #
+    fsevere::Float64 = 0.0 #
     eldq::Float64 = 0.0 ## complete isolation of elderly
     eldqag::Int8 = 5 ## default age group, if quarantined(isolated) is ag 5. 
     fpreiso::Float64 = 0.0 ## percent that is isolated at the presymptomatic stage
@@ -62,7 +62,7 @@ end
     herd::Int8 = 0 #typemax(Int32) ~ millions
     set_g_cov::Bool = false ###Given proportion for coverage
     cov_val::Float64 = 0.7
-    dont_vac_20::Bool = true
+    dont_vac_20::Bool = false
 end
 
 Base.@kwdef mutable struct ct_data_collect
@@ -207,13 +207,14 @@ function main(ip::ModelParameters,sim::Int64)
     if p.calibration 
         insert_infected(PRE, p.initialinf, 4)
     else 
-        insert_infected(LAT, p.initialinf, 4)
+        
         if p.dont_vac_20
             applying_vac2(sim)
         else
             applying_vac(sim)
         end
         herd_immu_dist(sim)
+        insert_infected(LAT, p.initialinf, 4)
         #insert_infected(REC, p.initialhi, 4)
     end    
     
