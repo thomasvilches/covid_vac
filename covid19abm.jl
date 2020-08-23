@@ -43,7 +43,7 @@ end
     initialhi::Int64 = 0 ## initial herd immunity, inserts number of REC individuals
     τmild::Int64 = 0 ## days before they self-isolate for mild cases
     fmild::Float64 = 0.0  ## percent of people practice self-isolation
-    fsevere::Float64 = 0.0 #
+    fsevere::Float64 = 1.0 #
     eldq::Float64 = 0.0 ## complete isolation of elderly
     eldqag::Int8 = 5 ## default age group, if quarantined(isolated) is ag 5. 
     fpreiso::Float64 = 0.0 ## percent that is isolated at the presymptomatic stage
@@ -62,7 +62,7 @@ end
     herd::Int8 = 0 #typemax(Int32) ~ millions
     set_g_cov::Bool = false ###Given proportion for coverage
     cov_val::Float64 = 0.7
-    dont_vac_20::Bool = false
+    dont_vac_20::Bool = true
 end
 
 Base.@kwdef mutable struct ct_data_collect
@@ -207,12 +207,7 @@ function main(ip::ModelParameters,sim::Int64)
     if p.calibration 
         insert_infected(PRE, p.initialinf, 4)
     else 
-        
-        if p.dont_vac_20
-            applying_vac2(sim)
-        else
-            applying_vac(sim)
-        end
+        applying_vac(sim)
         herd_immu_dist(sim)
         insert_infected(LAT, p.initialinf, 4)
         #insert_infected(REC, p.initialhi, 4)
@@ -330,22 +325,19 @@ function herd_immu_dist(sim::Int64)
     rng = MersenneTwister(200*sim)
     vec_n = zeros(Int32,6)
     if p.herd == 5
-        vec_n = [15; 139; 238;  68; 12; 16]
+        vec_n = [17; 141; 240;  70; 14; 18]
         
     elseif p.herd == 10
-        vec_n = [32; 275; 480; 142; 26; 34]
+        vec_n = [34; 277; 482; 144; 28; 35]
         
     elseif p.herd == 20
-        vec_n = [69; 512; 936; 297; 58; 77]
+        vec_n = [77; 520; 944; 305; 66; 88]
     end
 
     for g = 1:6
-
         pos = findall(y->y.ag_new == g,humans)
         n_dist = min(length(pos),vec_n[g])
-
         pos2 = sample(rng,pos,n_dist,replace=false)
-
         for i = pos2
             move_to_recovered(humans[i])
             humans[i].sickfrom = INF
@@ -433,7 +425,9 @@ function applying_vac(sim::Int64)
     rng = MersenneTwister(100*sim)
     if p.apply_vac
         vac_age_thres = [4;12;17;49;64;79;999]
-        vac_cov_ag = [0.70;0.63;0.52;0.338;0.473;0.681;0.7]
+
+        vac_cov_ag = [0.70;0.58;0.48;0.34;0.45;0.66;0.7]
+
         p_ct_pg = zeros(Float64,length(vac_cov_ag))
         n_vac::Int64 = 0
         for x = humans
@@ -544,111 +538,18 @@ function applying_vac(sim::Int64)
             end
         end
     end
-end
-export applying_vac
 
-###############################
-### No 20< #############
-
-function applying_vac2(sim::Int64)
-    rng = MersenneTwister(100*sim)
-    if p.apply_vac
-        vac_age_thres = [4;12;19;49;64;79;999]
-        vac_cov_ag = [0.0;0.0;0.0;0.338;0.473;0.681;0.7]
-        p_ct_pg = zeros(Float64,length(vac_cov_ag))
-        n_vac::Int64 = 0
-        for x = humans
-            g = findfirst(y-> vac_age_thres[y] >= x.age,1:length(vac_age_thres))
-            if rand(rng) < vac_cov_ag[g]
-              n_vac += 1
-              p_ct_pg[g] += 1.0
-            end
-        end
-       
-        p_ct_pg = p_ct_pg/n_vac
-
-        if p.set_g_cov == true 
-            
-            n_vac = Int(round(p.cov_val*p.popsize))
-            if p.apply_vac_com
-                for x = humans
-                    if x.comorbidity == 1 && x.age>19
-                        x.vac_status = 1
-                        red_com = p.vac_com_dec_min+rand(rng)*(p.vac_com_dec_max-p.vac_com_dec_min)
-                        x.vac_ef = (1-red_com)*p.vaccine_ef
-                        n_vac -= 1
-                        if n_vac == 0
-                            break;
-                        end
-
-                    end
-                end
-            end
-
-            pos = findall(y->y.vac_status == 0,humans)
-            pos = sample(rng,pos,n_vac,replace = false)
-            for i = pos
-                x = humans[i]
-                indice = (x.comorbidity == 1 || x.age>=65) ? 1 : 0
-                
-                x.vac_status = 1
-                red_com = p.vac_com_dec_min+rand(rng)*(p.vac_com_dec_max-p.vac_com_dec_min)
-                x.vac_ef = (1-(red_com*indice))*p.vaccine_ef
-                n_vac -= 1
-            end
-
-        else
-            if p.apply_vac_com
-                for x = humans
-                    if x.comorbidity == 1 && x.age>19
-                        x.vac_status = 1
-                        red_com = p.vac_com_dec_min+rand(rng)*(p.vac_com_dec_max-p.vac_com_dec_min)
-                        x.vac_ef = (1-red_com)*p.vaccine_ef
-                        n_vac -= 1
-                        if n_vac == 0
-                            break;
-                        end
-
-                    end
-                end
-            end
-
-            while n_vac > 0
-                Ng = Int.(round.(p_ct_pg/sum(p_ct_pg)*n_vac))
-                if sum(Ng) == 0 ###if it reaches here but sum(Ng) is 0, probably n_vac =1 or 2, so, just allocate these remain vaccines randomly
-                    pos = findall(y-> y.vac_status == 0 && y.age>19,humans)
-                    pos = sample(rng,pos,n_vac,replace = false)
-                    for i = pos
-                        x = humans[i]
-                        indice = (x.comorbidity==1 || x.age>=65) ? 1 : 0
-                        
-                        x.vac_status = 1
-                        red_com = p.vac_com_dec_min+rand(rng)*(p.vac_com_dec_max-p.vac_com_dec_min)
-                        x.vac_ef = (1-(red_com*indice))*p.vaccine_ef
-                        n_vac -= 1
-                    end
-                end
-                for g = 4:length(Ng)
-                    pos = findall(y->y.age>vac_age_thres[g-1] && y.age<=vac_age_thres[g] && y.vac_status == 0,humans)
-                    if length(pos) > Ng[g]
-                        pos = sample(rng,pos,Int(round(Ng[g])),replace = false)
-                    else
-                        p_ct_pg[g] = 0.0
-                    end
-                    for i = pos
-                        x = humans[i]
-                        x.vac_status = 1
-                        indice = (x.comorbidity==1 || x.age>=65) ? 1 : 0
-                        red_com = p.vac_com_dec_min+rand(rng)*(p.vac_com_dec_max-p.vac_com_dec_min)
-                        x.vac_ef = (1-(red_com*indice))*p.vaccine_ef
-                        n_vac -= 1
-                    end
-                end
-            end
+    if p.dont_vac_20
+        pos = findall(x->x.age<20,humans)
+        for i = pos
+            humans[i].vac_ef = 0.0
+            humans[i].vac_status = 0
         end
     end
 end
-export applying_vac2
+export applying_vac
+
+
 
 
 function initialize() 
@@ -808,8 +709,8 @@ function move_to_latent(x::Human)
     #symp_pcts = (0.75, 0.75, 0.86, 0.93, 0.93) 
     
     #0-18 31 19 - 59 29 60+ 18 going to asymp
-    symp_pcts = [0.69, 0.71, 0.82]
-    age_thres = [18, 59, 999]
+    symp_pcts = [0.7, 0.69, 0.71, 0.82, 0.87]
+    age_thres = [4, 19, 64, 79, 999]
     g = findfirst(y-> y >= x.age, age_thres)
      
     x.swap = rand() < (symp_pcts[g]) ? PRE : ASYMP 
