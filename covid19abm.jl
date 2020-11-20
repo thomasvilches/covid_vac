@@ -66,7 +66,7 @@ end
     vac_com_dec_min::Float16 = 0.1 # how much the comorbidity decreases the vac eff
     herd::Int8 = 0 #typemax(Int32) ~ millions
     set_g_cov::Bool = false ###Given proportion for coverage
-    cov_val::Float64 = 0.7
+    cov_val::Float64 = 0.2
     dont_vac_20::Bool = true
     
     
@@ -392,7 +392,19 @@ function vac_selection()
     pos1 = shuffle([pos_com;pos_eld])
     #pos2 = shuffle([pos_n_com;pos_y])
     pos2 = shuffle(pos_n_com)
-    return [pos_hcw; pos1; pos2]
+
+    v = [pos_hcw; pos1; pos2]
+    if p.set_g_cov
+        if p.cov_val*p.popsize > length(v)
+            error("general population compliance is not enough to reach the coverage.")
+            exit(1)
+        else
+            aux = Int(round(p.cov_val*p.popsize))
+            v = v[1:aux]
+        end
+    end
+
+    return v
 end
 
 
@@ -401,28 +413,52 @@ function vac_index(l::Int64)
     daily_vac::Int64 = Int(round(p.daily_cov*p.popsize))
     prop::Float64 = 2/3
 
-    n1 = Int(ceil((l-p.vac_period*daily_vac)/(daily_vac*prop)))
-    
-    n2 = Int(ceil(((l-n1*Int(round(daily_vac*(1-prop))))/(daily_vac))))
-    
-    n1 = p.vac_period+n1+1
+    if p.vac_period*daily_vac < l
+        n1 = Int(ceil((l-p.vac_period*daily_vac)/(daily_vac*prop)))
+        
+        n2 = Int(ceil(((l-n1*Int(round(daily_vac*(1-prop))))/(daily_vac))))
+        
+        n1 = p.vac_period+n1+1
 
-    n = Int(n1+n2)
-    v1 = zeros(Int64,n)
-    v2 = zeros(Int64,n)
-    #First x days, there is only primary vac
-    for i = 2:(p.vac_period+1)
-        v1[i] = daily_vac+v1[i-1]
+        n = Int(n1+n2)
+        v1 = zeros(Int64,n)
+        v2 = zeros(Int64,n)
+        #First x days, there is only primary vac
+        for i = 2:(p.vac_period+1)
+            v1[i] = daily_vac+v1[i-1]
+        end
+        for i = (p.vac_period+2):(n1)
+            v1[i] = Int(round(daily_vac*(prop)+v1[i-1]))
+            v2[i] = Int(round(daily_vac*(1-prop)+v2[i-1]))
+        end
+        v1[n1] = l
+        for i = (n1+1):n
+            v2[i] = daily_vac+v2[i-1]
+        end
+        v2[n] = l
+
+    else
+        n1 = Int(ceil((l/(daily_vac))))
+        
+       # n2 = Int(ceil(((l-n1*Int(round(daily_vac*(1-prop))))/(daily_vac))))
+        
+        #n1 = p.vac_period+n1+1
+
+        n = Int(p.vac_period+n1)
+        v1 = zeros(Int64,n)
+        v2 = zeros(Int64,n)
+        #First x days, there is only primary vac
+        for i = 2:(n1)
+            v1[i] = daily_vac+v1[i-1]
+        end
+
+        v1[n1+1] = l
+        for i = (p.vac_period+1):n
+            v2[i] = daily_vac+v2[i-1]
+        end
+        v2[n] = l
+
     end
-    for i = (p.vac_period+2):(n1)
-        v1[i] = Int(round(daily_vac*(prop)+v1[i-1]))
-        v2[i] = Int(round(daily_vac*(1-prop)+v2[i-1]))
-    end
-    v1[n1] = l
-    for i = (n1+1):n
-        v2[i] = daily_vac+v2[i-1]
-    end
-    v2[n] = l
     return v1,v2
 end
 
@@ -991,7 +1027,7 @@ end
 function sample_epi_durations()
     # when a person is sick, samples the 
     #lat_dist = Distributions.truncated(Gamma(3.122, 2.656),4,11.04) # truncated between 4 and 7
-    lat_dist = Distributions.truncated(LogNormal(log(5.2), 0.1), 4, 7) # truncated between 4 and 7
+    lat_dist = Distributions.truncated(LogNormal(1.434, 0.661), 4, 7) # truncated between 4 and 7
     pre_dist = Distributions.truncated(Gamma(1.058, 5/2.3), 0.8, 3)#truncated between 0.8 and 3
     asy_dist = Gamma(5, 1)
     inf_dist = Gamma((3.2)^2/3.7, 3.7/3.2)

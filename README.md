@@ -12,7 +12,7 @@ include("simulations.jl"), if you wont use a cluster, or
 include("simulations_cluster.jl"), if you will use a cluster (note that it is done using "Cluster manager" package and slurm).
 
 After including the above, run simulations using
-run_param(b,herd_im_v,fs,vaccinate,days_b,vac_ef_v,nsims)
+run_param(b,herd_im_v,fs,vaccinate,days_b,vac_ef_v,sc,cov,nsims)
 
 in which the arguments are
 b = the probability transmission (the default is 0.08 which generates 60% of Attack Rate without any kind of control)
@@ -21,6 +21,8 @@ fs = proportion of severe cases that are isolated
 vaccinate = Boolean saying if one wants to apply vac or not. (default is false)
 days_b = how many days before the onset of epidemics the vaccination starts
 vac_ef_v = float vector with vaccines efficacy one wants to run. (default is 0.0)
+sc = set specific coverage? Boolean. The default is false, which generates 40% of coverage (when vaccinating).
+cov = the specific coverage
 nsims = integer. Number of monte carlo simulations to be performed
 
 The age distribution is set to USA reports. The Vaccination is implemented in order to vaccinate HCW first, then comorbid and elderly people, and last general population (all of them over 18 years old)
