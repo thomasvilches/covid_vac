@@ -60,14 +60,15 @@ end
     cidtime::Int8 = 0  ## time to identification (for CT) post symptom onset
     cdaysback::Int8 = 0 ## number of days to go back and collect contacts
     #vaccine_ef::Float16 = 0.0   ## change this to Float32 typemax(Float32) typemax(Float64)
-    apply_vac::Bool = false
+    apply_vac::Bool = true
     apply_vac_com::Bool = true #will we focus vaccination on comorbidity?
     vac_com_dec_max::Float16 = 0.5 # how much the comorbidity decreases the vac eff
     vac_com_dec_min::Float16 = 0.1 # how much the comorbidity decreases the vac eff
     herd::Int8 = 0 #typemax(Int32) ~ millions
     set_g_cov::Bool = false ###Given proportion for coverage
     cov_val::Float64 = 0.2
-    dont_vac_20::Bool = true
+    dont_vac_20::Bool = false
+    vaccinating_appendix::Bool = false
     
     
     hcw_vac_comp::Float64 = 0.90
@@ -284,11 +285,15 @@ function main(ip::ModelParameters,sim::Int64)
     elseif p.calibration2 
         herd_immu_dist_2(sim)
         h_init = insert_infected(PRE, p.initialinf, 4)[1]
-    else 
-        #applying_vac(sim)
+    elseif p.vaccinating_appendix 
+        applying_vac(sim)
         herd_immu_dist_2(sim)
         h_init = insert_infected(LAT, p.initialinf, 4)[1]
         #insert_infected(REC, p.initialhi, 4)
+    else
+        #applying_vac(sim)
+        herd_immu_dist_2(sim)
+        h_init = insert_infected(LAT, p.initialinf, 4)[1]
     end    
     
     ## save the preisolation isolation parameters
@@ -761,7 +766,7 @@ function comorbidity(ag::Int16)
 end
 export comorbidity
 
-#=
+
 function applying_vac(sim::Int64)
     rng = MersenneTwister(100*sim)
     if p.apply_vac
@@ -789,7 +794,7 @@ function applying_vac(sim::Int64)
                     if x.comorbidity == 1
                         x.vac_status = 1
                         red_com = p.vac_com_dec_min+rand(rng)*(p.vac_com_dec_max-p.vac_com_dec_min)
-                        x.vac_ef = (1-red_com)*p.vaccine_ef
+                        x.vac_ef = (1-red_com)*p.vac_efficacy
                         n_vac -= 1
                         if n_vac == 0
                             break;
@@ -807,7 +812,7 @@ function applying_vac(sim::Int64)
                 
                 x.vac_status = 1
                 red_com = p.vac_com_dec_min+rand(rng)*(p.vac_com_dec_max-p.vac_com_dec_min)
-                x.vac_ef = (1-(red_com*indice))*p.vaccine_ef
+                x.vac_ef = (1-(red_com*indice))*p.vac_efficacy
                 n_vac -= 1
             end
 
@@ -817,7 +822,7 @@ function applying_vac(sim::Int64)
                     if x.comorbidity == 1
                         x.vac_status = 1
                         red_com = p.vac_com_dec_min+rand(rng)*(p.vac_com_dec_max-p.vac_com_dec_min)
-                        x.vac_ef = (1-red_com)*p.vaccine_ef
+                        x.vac_ef = (1-red_com)*p.vac_efficacy
                         n_vac -= 1
                         if n_vac == 0
                             break;
@@ -838,7 +843,7 @@ function applying_vac(sim::Int64)
                         
                         x.vac_status = 1
                         red_com = p.vac_com_dec_min+rand(rng)*(p.vac_com_dec_max-p.vac_com_dec_min)
-                        x.vac_ef = (1-(red_com*indice))*p.vaccine_ef
+                        x.vac_ef = (1-(red_com*indice))*p.vac_efficacy
                         n_vac -= 1
                     end
                 end
@@ -855,7 +860,7 @@ function applying_vac(sim::Int64)
                     
                     x.vac_status = 1
                     red_com = p.vac_com_dec_min+rand(rng)*(p.vac_com_dec_max-p.vac_com_dec_min)
-                    x.vac_ef = (1-(red_com*indice))*p.vaccine_ef
+                    x.vac_ef = (1-(red_com*indice))*p.vac_efficacy
                     n_vac -= 1
                 end
 
@@ -872,7 +877,7 @@ function applying_vac(sim::Int64)
                         x.vac_status = 1
                         indice = (x.comorbidity==1 || x.age>=65) ? 1 : 0
                         red_com = p.vac_com_dec_min+rand(rng)*(p.vac_com_dec_max-p.vac_com_dec_min)
-                        x.vac_ef = (1-(red_com*indice))*p.vaccine_ef
+                        x.vac_ef = (1-(red_com*indice))*p.vac_efficacy
                         n_vac -= 1
                     end
                 end
@@ -890,7 +895,7 @@ function applying_vac(sim::Int64)
 end
 export applying_vac
 
-=#
+
 
 
 function initialize() 
