@@ -234,6 +234,7 @@ function calibrate(beta, nsims, herdi = 0, cali2 = false, fs = 0.0, prov=:usa, i
     myp.calibration = true
     myp.calibration2 = cali2
     myp.fsevere = fs
+    myp.fmild = fs
     myp.initialinf = init_inf
     myp.herd = herdi
     m, sd = _calibrate(nsims, myp)
@@ -269,11 +270,11 @@ function create_folder(ip::cv.ModelParameters)
     #strategy = ip.apply_vac_com == true ? "T" : "UT"
     strategy = ip.vaccinating == true ? "$(ip.days_before)" : "NV"
     #RF = string("heatmap/results_prob_","$(replace(string(ip.β), "." => "_"))","_vac_","$(replace(string(ip.vaccine_ef), "." => "_"))","_herd_immu_","$(ip.herd)","_$strategy","cov_$(replace(string(ip.cov_val)))") ## 
-    main_folder = "/data/thomas-covid/new_vac_usa"
+    main_folder = "/data/thomas-covid/for_sci"
     if ip.set_g_cov
         RF = string(main_folder,"/results_prob_","$(replace(string(ip.β), "." => "_"))","_vac_","$(replace(string(ip.vac_efficacy), "." => "_"))","_herd_immu_","$(ip.herd)","_$strategy","_cov_$(replace(string(ip.cov_val), "." => "_"))") ## 
     else
-        RF = string(main_folder,"/results_prob_","$(replace(string(ip.β), "." => "_"))","_vac_","$(replace(string(ip.vac_efficacy), "." => "_"))","_herd_immu_","$(ip.herd)","_$strategy") ##  
+        RF = string(main_folder,"/results_prob_","$(replace(string(ip.β), "." => "_"))","_vac_","$(replace(string(ip.vac_efficacy), "." => "_"))","_herd_immu_","$(ip.herd)_$(ip.reduction_protection)","_$strategy") ##  
     end
     if !Base.Filesystem.isdir(RF)
         Base.Filesystem.mkpath(RF)
@@ -296,11 +297,11 @@ end
 
 
 ## now, running vaccine and herd immunity, focusing and not focusing in comorbidity, first  argument turns off vac
-function run_param_fix(herd_im_v = [0],fs=0.0,vaccinate = false,days_b = [0],vac_ef_v = [0.0],sc = false,cov = 0.0,nsims=1000)
-    for v_e = vac_ef_v, h_i = herd_im_v,days_b1 = days_b
-        bd = Dict(3=>0.0425,5=>0.0425, 10=>0.0448, 20=>0.0515)
+function run_param_fix(herd_im_v = [0],fs=0.0,vaccinate = false,days_b = [0],v_e = 0.0,ndose=false,drop = 0.0,vfd = v_e/2.0,rd=0.0,sc = false,cov = 0.0,nsims=1000)
+    for h_i = herd_im_v,days_b1 = days_b
+        bd = Dict(3=>0.0485,5=>0.051, 10=>0.052, 20=>0.0595, 30=>0.068)
         b = bd[h_i]
-        @everywhere ip = cv.ModelParameters(β=$b,fsevere = $fs,vaccinating = $vaccinate, days_before = $days_b1,vac_efficacy = $v_e,herd = $(h_i),set_g_cov = $sc,cov_val = $cov)
+        @everywhere ip = cv.ModelParameters(β=$b,fsevere = $fs,fmild = $fs,vaccinating = $vaccinate, days_before = $days_b1,vac_efficacy = $v_e,herd = $(h_i),set_g_cov = $sc,cov_val = $cov,single_dose=$(ndose),vac_efficacy_fd=$vfd,drop_rate = $drop,reduction_protection=$rd)
         folder = create_folder(ip)
 
         #println("$v_e $(ip.vaccine_ef)")
