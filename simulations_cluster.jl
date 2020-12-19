@@ -27,7 +27,7 @@ addprocs(SlurmManager(500), N=17, topology=:master_worker, exeflags="--project=.
 function run(myp::cv.ModelParameters, nsims=1000, folderprefix="./")
     println("starting $nsims simulations...\nsave folder set to $(folderprefix)")
     dump(myp)
-    myp.calibration && error("can not run simulation, calibration is on.")
+    myp.calibration && !myp.ignore_cal && error("can not run simulation, calibration is on.")
     # will return 6 dataframes. 1 total, 4 age-specific 
     cdr = pmap(1:nsims) do x                 
             cv.runsim(x, myp)
@@ -248,22 +248,22 @@ function calibrate_robustness(beta, reps, prov=:usa)
     # once a beta is found based on nsims simulations, 
     # see how robust it is. run calibration with same beta 100 times 
     # to see the variation in R0 produced. 
-    nsims = [500, 1000]
-    means = zeros(Float64, reps, length(nsims))
-    for (i, ns) in enumerate(nsims)
-        cd = map(1:reps) do x 
-            println("iter: $x, sims: $ns")
-            mval = calibrate(beta, ns, prov)         
-            return mval
-        end
-        means[:, i] = cd
+    #nsims = [1000]
+    means = zeros(Float64, reps)
+    #for (i, ns) in enumerate(nsims)
+    cd = map(1:reps) do x 
+        println("iter: $x")
+        mval = calibrate(beta,10000)         
+        return mval
     end
+    
+    #end
     # for i in 2:nworkers()
     #     ## mf defined as: @everywhere mg() = covid19abm.p.β     
     #     rpr = remotecall_fetch(mf,  i+1).prov
     #     rpr != prov && error("province didn't get set in the remote workers")
     # end
-    return means
+    return cd
 end
 
 function create_folder(ip::cv.ModelParameters)
@@ -299,7 +299,7 @@ end
 ## now, running vaccine and herd immunity, focusing and not focusing in comorbidity, first  argument turns off vac
 function run_param_fix(herd_im_v = [0],fs=0.0,vaccinate = false,days_b = [0],v_e = 0.0,ndose=false,drop = 0.0,vfd = v_e/2.0,rd=0.0,sc = false,cov = 0.0,nsims=1000)
     for h_i = herd_im_v,days_b1 = days_b
-        bd = Dict(3=>0.0485,5=>0.051, 10=>0.052, 20=>0.0595, 30=>0.068)
+        bd = Dict(3=>0.0585,5=>0.0605, 10=>0.06, 20=>0.0695, 30=>0.0857)
         b = bd[h_i]
         @everywhere ip = cv.ModelParameters(β=$b,fsevere = $fs,fmild = $fs,vaccinating = $vaccinate, days_before = $days_b1,vac_efficacy = $v_e,herd = $(h_i),set_g_cov = $sc,cov_val = $cov,single_dose=$(ndose),vac_efficacy_fd=$vfd,drop_rate = $drop,reduction_protection=$rd)
         folder = create_folder(ip)
@@ -311,9 +311,9 @@ end
 
 
 ## now, running vaccine and herd immunity, focusing and not focusing in comorbidity, first  argument turns off vac
-function run_calibration(beta = 0.0345,herd_im_v = 0,cali = false,fs = 0.0,nsims=1000)
+function run_calibration(beta = 0.0345,herd_im_v = 0,cali1=true,cali = false,fs = 0.0,nsims=1000)
    
-    @everywhere ip = cv.ModelParameters(β=$beta,herd = $herd_im_v,modeltime = 30,fsevere = $fs,calibration2 = $cali)
+    @everywhere ip = cv.ModelParameters(β=$beta,herd = $herd_im_v,modeltime = 30,fsevere = $fs,calibration=$cali1,calibration2 = $cali,ignore_cal=true)
     folder = create_folder(ip)
 
     #println("$v_e $(ip.vaccine_ef)")

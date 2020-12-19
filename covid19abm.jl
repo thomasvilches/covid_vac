@@ -34,6 +34,7 @@ Base.@kwdef mutable struct Human
     hcw::Bool = false
     days_vac::Int64 = -1
     vac_red::Float64 = 0.0
+    first_one::Bool = false
 end
 
 ## default system parameters
@@ -44,6 +45,7 @@ end
     prov::Symbol = :usa
     calibration::Bool = false
     calibration2::Bool = false 
+    ignore_cal::Bool = false
     modeltime::Int64 = 500
     initialinf::Int64 = 1
     initialhi::Int64 = 0 ## initial herd immunity, inserts number of REC individuals
@@ -54,7 +56,7 @@ end
     eldqag::Int8 = 5 ## default age group, if quarantined(isolated) is ag 5. 
     fpreiso::Float64 = 0.0 ## percent that is isolated at the presymptomatic stage
     tpreiso::Int64 = 0## preiso is only turned on at this time. 
-    frelasymp::Float64 = 0.11 ## relative transmission of asymptomatic
+    frelasymp::Float64 = 0.26 ## relative transmission of asymptomatic
     ctstrat::Int8 = 0 ## strategy 
     fctcapture::Float16 = 0.0 ## how many symptomatic people identified
     fcontactst::Float16 = 0.0 ## fraction of contacts being isolated/quarantined
@@ -89,6 +91,7 @@ end
     single_dose::Bool = false
     drop_rate::Float64 = 0.0
 
+    red_risk_perc::Float64 = 1.0
     reduction_protection::Float64 = 0.0
     fd_1::Int64 = 30
     fd_2::Int64 = 6
@@ -243,7 +246,7 @@ function runsim(simnum, ip::ModelParameters)
       
     end
     
-    R0 = length(findall(k -> k.wentTo == PRE && k.sickby == hh,humans))
+    R0 = length(findall(k -> k.sickby == hh,humans))
 
     #return (a=all, g1=ag1, g2=ag2, g3=ag3, g4=ag4, g5=ag5, infectors=infectors, vi = vac_idx,ve=vac_ef_i,com = comorb_idx,n_vac = n_vac,n_inf_vac = n_inf_vac,n_inf_nvac = n_inf_nvac)
     return (a=all, g1=ag1, g2=ag2, g3=ag3, g4=ag4, g5=ag5,g6=ag6, infectors=infectors, ve=vac_ef_i,
@@ -289,10 +292,10 @@ function main(ip::ModelParameters,sim::Int64)
     # and setup the right swap function. 
     if p.calibration 
          herd_immu_dist_2(sim)
-         h_init = insert_infected(PRE, p.initialinf, 4)[1]
+         h_init = insert_infected(LAT, p.initialinf, 4)[1]
     elseif p.calibration2 
         herd_immu_dist_2(sim)
-        h_init = insert_infected(PRE, p.initialinf, 4)[1]
+        h_init = insert_infected(LAT, p.initialinf, 4)[1]
     elseif p.vaccinating_appendix 
         applying_vac(sim)
         herd_immu_dist_2(sim)
@@ -486,61 +489,86 @@ function vac_index_new(l::Int64)
 
     v1 = Array{Int64,1}(undef,p.modeltime);
     v2 = Array{Int64,1}(undef,p.modeltime);
-
-    for i = 1:p.modeltime
-        v1[i] = -1
-        v2[i] = -1
-    end
-
-    v1[1] = 0
-    v2[1] = 0
-    for i = 2:(p.vac_period+1)
-        v1[i] = (i-1)*p.fd_1
-        v2[i] = 0
-    end
-
-
     n::Int64 = p.fd_2+p.sd1
-
-    kk::Int64 = p.vac_period+2
     v1_aux::Bool = false
+   
+    
     v2_aux::Bool = false
+    kk::Int64 = 2
 
-    eligible::Int64 = 0
-    last_v2::Int64 = 0
-    while !v1_aux || !v2_aux
+    if p.single_dose
+        for i = 1:p.modeltime
+            v1[i] = -1
+            v2[i] = -1
+           
+        end
+        v1[1] = 0
+        while !v1_aux
+            v1[kk] = v1[kk-1]+n
+            if v1[kk] >= l
+                v1[kk] = l
+                v1_aux = true
+            end
+            kk += 1
 
-        eligible = eligible+(v1[kk-p.vac_period]-v1[kk-p.vac_period-1])
-        v2_1 = min(p.sd1,eligible-last_v2)
+        end
+        a = findfirst(x-> x == l, v1)
 
-        v2[kk] = last_v2+v2_1
-        last_v2 = v2[kk]
-        n_aux = n-v2_1
-        v1[kk] = v1[kk-1]+n_aux
-
-        
-        if v1[kk] >= l
-            v1[kk] = l
-            v1_aux = true
+        for i = (a+1):length(v1)
+            v1[i] = -1
+        end
+        a = a+1
+    else
+        for i = 1:p.modeltime
+            v1[i] = -1
+            v2[i] = -1
         end
 
-        if v2[kk] >= l
-            v2[kk] = l
-            v2_aux = true
+        v1[1] = 0
+        v2[1] = 0
+        for i = 2:(p.vac_period+1)
+            v1[i] = (i-1)*p.fd_1
+            v2[i] = 0
         end
-        kk += 1
 
+        kk = p.vac_period+2
+       
+
+        eligible::Int64 = 0
+        last_v2::Int64 = 0
+        while !v1_aux || !v2_aux
+
+            eligible = eligible+(v1[kk-p.vac_period]-v1[kk-p.vac_period-1])
+            v2_1 = min(p.sd1,eligible-last_v2)
+
+            v2[kk] = last_v2+v2_1
+            last_v2 = v2[kk]
+            n_aux = n-v2_1
+            v1[kk] = v1[kk-1]+n_aux
+
+            
+            if v1[kk] >= l
+                v1[kk] = l
+                v1_aux = true
+            end
+
+            if v2[kk] >= l
+                v2[kk] = l
+                v2_aux = true
+            end
+            kk += 1
+
+        end
+
+        a = findfirst(x-> x == l, v1)
+
+        for i = (a+1):length(v1)
+            v1[i] = -1
+        end
+
+
+        a = findfirst(x-> x == -1, v2)
     end
-
-    a = findfirst(x-> x == l, v1)
-
-    for i = (a+1):length(v1)
-        v1[i] = -1
-    end
-
-
-    a = findfirst(x-> x == -1, v2)
-
 
     return v1[1:(a-1)],v2[1:(a-1)]
 end
@@ -746,17 +774,17 @@ function herd_immu_dist_2(sim::Int64)
     rng = MersenneTwister(200*sim)
     vec_n = zeros(Int32,6)
     if p.herd == 5
-        vec_n = [15; 143; 246;  70; 11; 15]
+        vec_n = [15; 139; 249;  70; 11; 16]
         
     elseif p.herd == 10
-        vec_n = [32; 277; 489; 143; 25; 34]
+        vec_n = [28; 277; 497; 141; 23; 34]
         
     elseif p.herd == 20
-        vec_n = [70; 519; 971; 308; 56; 76]
+        vec_n = [67; 533; 971; 303; 53; 73]
     elseif p.herd == 30
-        vec_n = [108; 741; 1437; 489; 95; 130]
+        vec_n = [107; 770; 1448; 470; 86; 119]
     elseif p.herd == 3
-        vec_n = [9; 86; 150; 42; 6; 7]
+        vec_n = [7; 85; 154; 42; 5; 7]
     end
 
     for g = 1:6
@@ -1042,6 +1070,7 @@ function insert_infected(health, num, ag)
         h = sample(l, num; replace = false)
         @inbounds for i in h 
             x = humans[i]
+            x.first_one = true
             if health == PRE 
                 move_to_pre(x) ## the swap may be asymp, mild, or severe, but we can force severe in the time_update function
             elseif health == LAT 
@@ -1147,7 +1176,7 @@ function move_to_latent(x::Human)
     x.wentTo = x.swap
     x.got_inf = true
     ## in calibration mode, latent people never become infectious.
-     if p.calibration 
+    if p.calibration && !x.first_one
         x.swap = LAT 
         x.exp = 999
     end 
@@ -1193,7 +1222,8 @@ function move_to_mild(x::Human)
     # how many days as full contacts before self-isolation
     # NOTE: if need to count non-isolated mild people, this is overestimate as isolated people should really be in MISO all the time
     #   and not go through the mild compartment 
-    if x.iso || rand() < p.fmild
+    aux = x.vac_status > 0 ? p.fmild*p.red_risk_perc : p.fmild
+    if x.iso || rand() < aux#p.fmild
         x.swap = MISO  
         x.exp = p.τmild
     end
