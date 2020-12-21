@@ -46,6 +46,7 @@ end
     calibration::Bool = false
     calibration2::Bool = false 
     ignore_cal::Bool = false
+    start_several_inf::Bool = false
     modeltime::Int64 = 500
     initialinf::Int64 = 1
     initialhi::Int64 = 0 ## initial herd immunity, inserts number of REC individuals
@@ -246,7 +247,7 @@ function runsim(simnum, ip::ModelParameters)
       
     end
     
-    R0 = length(findall(k -> k.sickby == hh,humans))
+    R0 = length(findall(k -> k.sickby in hh,humans))/length(hh)
 
     #return (a=all, g1=ag1, g2=ag2, g3=ag3, g4=ag4, g5=ag5, infectors=infectors, vi = vac_idx,ve=vac_ef_i,com = comorb_idx,n_vac = n_vac,n_inf_vac = n_inf_vac,n_inf_nvac = n_inf_nvac)
     return (a=all, g1=ag1, g2=ag2, g3=ag3, g4=ag4, g5=ag5,g6=ag6, infectors=infectors, ve=vac_ef_i,
@@ -287,20 +288,22 @@ function main(ip::ModelParameters,sim::Int64)
     hmatrix = zeros(Int16, p.popsize, p.modeltime)
     initialize() # initialize population
     
-    h_init::Int64 = 0
+    #h_init::Int64 = 0
     # insert initial infected agents into the model
     # and setup the right swap function. 
-    if p.calibration 
-         herd_immu_dist_2(sim)
-         h_init = insert_infected(LAT, p.initialinf, 4)[1]
-    elseif p.calibration2 
+    if p.calibration && !p.start_several_inf
         herd_immu_dist_2(sim)
-        h_init = insert_infected(LAT, p.initialinf, 4)[1]
+        h_init = insert_infected(PRE, p.initialinf, 4)[1]
+            #insert_infected(REC, p.initialhi, 4)
+    elseif p.start_several_inf
+        herd_immu_dist_3(sim)
+        insert_infected(LAT, p.initialinf, 4)[1]
+        h_init = findall(x->x.health in (MILD,INF,LAT,PRE,ASYMP),humans)
+
     elseif p.vaccinating_appendix 
         applying_vac(sim)
         herd_immu_dist_2(sim)
         h_init = insert_infected(LAT, p.initialinf, 4)[1]
-        #insert_infected(REC, p.initialhi, 4)
     else
         #applying_vac(sim)
         herd_immu_dist_2(sim)
@@ -741,18 +744,24 @@ function _get_column_incidence(hmatrix, hcol)
     end
     return timevec
 end
-#= 
-function herd_immu_dist(sim::Int64)
+
+function herd_immu_dist_2(sim::Int64)
     rng = MersenneTwister(200*sim)
     vec_n = zeros(Int32,6)
     if p.herd == 5
-        vec_n = [15; 143; 246;  70; 11; 15]
+        vec_n = [9; 148; 262;  68; 4; 9]
         
     elseif p.herd == 10
-        vec_n = [32; 277; 489; 143; 25; 34]
+        vec_n = [32; 279; 489; 143; 24; 33]
         
     elseif p.herd == 20
-        vec_n = [70; 519; 971; 308; 56; 76]
+        vec_n = [71; 531; 962; 302; 57; 77]
+    elseif p.herd == 30
+        vec_n = [105; 757; 1448; 481; 87; 122]
+    elseif p.herd == 0
+        vec_n = [0;0;0;0;0;0]
+    else
+        error("No herd immunity")
     end
 
     for g = 1:6
@@ -767,32 +776,154 @@ function herd_immu_dist(sim::Int64)
 
     end
 
-end =#
+end
 
 
-function herd_immu_dist_2(sim::Int64)
+function herd_immu_dist_3(sim::Int64)
     rng = MersenneTwister(200*sim)
     vec_n = zeros(Int32,6)
     if p.herd == 5
-        vec_n = [15; 139; 249;  70; 11; 16]
+        vec_n = [9; 148; 262;  68; 4; 9]
         
+        vec_pl = Int.(floor.([5.86;50.61;86.015;24.892;4.402;5.873]))
+        vec_pa = Int.(floor.([1.697;18.912;28.572;7.84;0.782;1.085]))
+        vec_pp = Int.(floor.([1.512;12.309000000000001;22.878;6.412;1.351;1.782]))
+        vec_pi = Int.(floor.([0.096;1.8900000000000001;5.132;3.895;1.61;2.085]))
+        vec_pm = Int.(floor.([2.217;17.102;29.659;5.815;0.395;0.528]))
+
+        a = vec_pl+vec_pa+vec_pp+vec_pi+vec_pm
+        a = map(x->Int(floor(x)),a)
+
+        vec_n = vec_n-a
+
+        for i = 1:length(vec_n)
+            if vec_n[i] < 0
+                vec_n[i] = 0
+            end
+        end
+
     elseif p.herd == 10
-        vec_n = [28; 277; 497; 141; 23; 34]
-        
+        vec_n = [32; 279; 489; 143; 24; 33]
+
+        vec_pl = Int.(floor.([10.032;77.726;139.145;42.201;7.867;10.622]))
+        vec_pa = Int.(floor.([3.0380000000000003;32.548;49.459;14.509;1.471;1.98]))
+        vec_pp = Int.(floor.([2.9250000000000003;20.557000000000002;38.649;11.465;2.511;3.315]))
+        vec_pi = Int.(floor.([0.20800000000000002;3.404;9.342;7.291;3.128;4.131]))
+        vec_pm = Int.(floor.([4.281;30.675;53.596000000000004;10.928;0.8190000000000001;1.058]))
+        a = vec_pl+vec_pa+vec_pp+vec_pi+vec_pm
+        a = map(x->Int(floor(x)),a)
+
+        vec_n = vec_n-a
+
+        for i = 1:length(vec_n)
+            if vec_n[i] < 0
+                vec_n[i] = 0
+            end
+        end
+
+
     elseif p.herd == 20
-        vec_n = [67; 533; 971; 303; 53; 73]
+        vec_n = [71; 531; 962; 302; 57; 77]
+
+        vec_pl = Int.(floor.([16.892;103.018;199.949;69.303;14.368;19.338]))
+        vec_pa = Int.(floor.([6.238;54.29;87.55;28.653000000000002;3.254;4.332]))
+        vec_pp = Int.(floor.([5.268;30.78;62.345;20.511;5.019;6.781000000000001]))
+        vec_pi = Int.(floor.([0.496;5.912;17.536;14.793000000000001;6.846;9.416]))
+        vec_pm = Int.(floor.([8.693;53.344;99.299;22.26;1.82;2.358]))
+
+        a = vec_pl+vec_pa+vec_pp+vec_pi+vec_pm
+        a = map(x->Int(floor(x)),a)
+
+        vec_n = vec_n-a
+
+        for i = 1:length(vec_n)
+            if vec_n[i] < 0
+                vec_n[i] = 0
+            end
+        end
+
     elseif p.herd == 30
-        vec_n = [107; 770; 1448; 470; 86; 119]
-    elseif p.herd == 3
-        vec_n = [7; 85; 154; 42; 5; 7]
+        vec_n = [105; 757; 1448; 481; 87; 122]
+
+        vec_pl = Int.(floor.([18.803;87.82600000000001;187.618;75.346;17.889;24.255]))
+        vec_pa = Int.(floor.([8.656;58.237;102.363;38.36;4.714;6.545]))
+        vec_pp = Int.(floor.([6.5360000000000005;29.176000000000002;65.09100000000001;25.367;7.094;9.354000000000001]))
+        vec_pi = Int.(floor.([0.7000000000000001;6.587;21.144000000000002;20.553;10.839;14.609]))
+        vec_pm = Int.(floor.([12.638;59.551;120.831;31.408;2.763;3.6310000000000002]))
+
+        a = vec_pl+vec_pa+vec_pp+vec_pi+vec_pm
+        a = map(x->Int(floor(x)),a)
+
+        vec_n = vec_n-a
+
+        for i = 1:length(vec_n)
+            if vec_n[i] < 0
+                vec_n[i] = 0
+            end
+        end
+
+    elseif p.herd == 0
+        vec_n = [0;0;0;0;0;0]
+        vec_pl = [0;0;0;0;0;0]
+        vec_pa = [0;0;0;0;0;0]
+        vec_pp = [0;0;0;0;0;0]
+        vec_pi = [0;0;0;0;0;0]
+        vec_pm = [0;0;0;0;0;0]
+    else
+        error("No herd immunity")
     end
 
     for g = 1:6
-        pos = findall(y->y.ag_new == g,humans)
+        pos = findall(y->y.ag_new == g && y.health == SUS,humans)
         n_dist = min(length(pos),vec_n[g])
         pos2 = sample(rng,pos,n_dist,replace=false)
         for i = pos2
             move_to_recovered(humans[i])
+            humans[i].sickfrom = INF
+            humans[i].herd_im = true
+        end
+
+        pos = findall(y->y.ag_new == g && y.health == SUS,humans)
+        n_dist = min(length(pos),vec_pl[g])
+        pos2 = sample(rng,pos,n_dist,replace=false)
+        for i = pos2
+            move_to_latent(humans[i])
+            humans[i].sickfrom = INF
+            humans[i].herd_im = true
+        end
+
+        pos = findall(y->y.ag_new == g && y.health == SUS,humans)
+        n_dist = min(length(pos),vec_pa[g])
+        pos2 = sample(rng,pos,n_dist,replace=false)
+        for i = pos2
+            move_to_asymp(humans[i])
+            humans[i].sickfrom = INF
+            humans[i].herd_im = true
+        end
+
+        pos = findall(y->y.ag_new == g && y.health == SUS,humans)
+        n_dist = min(length(pos),vec_pp[g])
+        pos2 = sample(rng,pos,n_dist,replace=false)
+        for i = pos2
+            move_to_pre(humans[i])
+            humans[i].sickfrom = INF
+            humans[i].herd_im = true
+        end
+
+        pos = findall(y->y.ag_new == g && y.health == SUS,humans)
+        n_dist = min(length(pos),vec_pi[g])
+        pos2 = sample(rng,pos,n_dist,replace=false)
+        for i = pos2
+            move_to_inf(humans[i])
+            humans[i].sickfrom = INF
+            humans[i].herd_im = true
+        end
+
+        pos = findall(y->y.ag_new == g && y.health == SUS,humans)
+        n_dist = min(length(pos),vec_pm[g])
+        pos2 = sample(rng,pos,n_dist,replace=false)
+        for i = pos2
+            move_to_mild(humans[i])
             humans[i].sickfrom = INF
             humans[i].herd_im = true
         end
@@ -1077,6 +1208,8 @@ function insert_infected(health, num, ag)
                 move_to_latent(x)
             elseif health == INF
                 move_to_infsimple(x)
+            elseif health == ASYMP
+                move_to_asymp(x)
             elseif health == REC 
                 move_to_recovered(x)
             else 
