@@ -296,8 +296,8 @@ function main(ip::ModelParameters,sim::Int64)
         h_init = insert_infected(PRE, p.initialinf, 4)[1]
             #insert_infected(REC, p.initialhi, 4)
     elseif p.start_several_inf
-        herd_immu_dist_3(sim)
-        insert_infected(LAT, p.initialinf, 4)[1]
+        N=herd_immu_dist_4(sim)
+        insert_infected(LAT, N, 4)[1]
         h_init = findall(x->x.health in (MILD,INF,LAT,PRE,ASYMP),humans)
 
     elseif p.vaccinating_appendix 
@@ -930,6 +930,48 @@ function herd_immu_dist_3(sim::Int64)
 
     end
 
+end
+
+
+function herd_immu_dist_4(sim::Int64)
+    rng = MersenneTwister(200*sim)
+    vec_n = zeros(Int32,6)
+    N::Int64 = 0
+    if p.herd == 5
+        vec_n = [9; 148; 262;  68; 4; 9]
+        N = 5
+
+    elseif p.herd == 10
+        vec_n = [32; 279; 489; 143; 24; 33]
+
+        N = 9
+
+    elseif p.herd == 20
+        vec_n = [71; 531; 962; 302; 57; 77]
+
+        N = 14
+    elseif p.herd == 30
+        vec_n = [105; 757; 1448; 481; 87; 122]
+
+        N = 16
+    elseif p.herd == 0
+        vec_n = [0;0;0;0;0;0]
+       
+    else
+        error("No herd immunity")
+    end
+
+    for g = 1:6
+        pos = findall(y->y.ag_new == g && y.health == SUS,humans)
+        n_dist = min(length(pos),vec_n[g])
+        pos2 = sample(rng,pos,n_dist,replace=false)
+        for i = pos2
+            move_to_recovered(humans[i])
+            humans[i].sickfrom = INF
+            humans[i].herd_im = true
+        end
+    end
+    return N
 end
 
 function _get_column_prevalence(hmatrix, hcol)

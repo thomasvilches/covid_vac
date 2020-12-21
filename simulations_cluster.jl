@@ -299,7 +299,7 @@ end
 ## now, running vaccine and herd immunity, focusing and not focusing in comorbidity, first  argument turns off vac
 function run_param_fix(herd_im_v = [0],fs=0.0,sev=false,vaccinate = false,days_b = [0],v_e = 0.0,ndose=false,drop = 0.0,vfd = v_e/2.0,rd=0.0,sc = false,cov = 0.0,nsims=1000)
     for h_i = herd_im_v,days_b1 = days_b
-        bd = Dict(5=>0.0415, 10=>0.047, 20=>0.0605, 30=>0.0765)
+        bd = Dict(5=>0.042, 10=>0.0445, 20=>0.05, 30=>0.0585)
         b = bd[h_i]
         @everywhere ip = cv.ModelParameters(β=$b,fsevere = $fs,fmild = $fs,vaccinating = $vaccinate, days_before = $days_b1,vac_efficacy = $v_e,herd = $(h_i),set_g_cov = $sc,cov_val = $cov,single_dose=$(ndose),vac_efficacy_fd=$vfd,drop_rate = $drop,reduction_protection=$rd,start_several_inf=$sev)
         folder = create_folder(ip)
