@@ -26,7 +26,11 @@ Base.@kwdef mutable struct Human
     tracedxp::Int16 = 0 ## the trace is killed after tracedxp amount of days
     comorbidity::Int8 = 0 ##does the individual has any comorbidity?
     vac_status::Int8 = 0 ##
-    vac_ef::Float16 = 0.0 
+    vac_eff_inf::Float16 = 0.0
+    vac_eff_symp::Float64 = 0.0
+    vac_eff_sev::Float64 = 0.0
+    vac_red::Float64 = 0.0
+
     got_inf::Bool = false
     herd_im::Bool = false
     hospicu::Int8 = -1
@@ -53,7 +57,7 @@ end
     eldqag::Int8 = 5 ## default age group, if quarantined(isolated) is ag 5. 
     fpreiso::Float64 = 0.0 ## percent that is isolated at the presymptomatic stage
     tpreiso::Int64 = 0## preiso is only turned on at this time. 
-    frelasymp::Float64 = 0.11 ## relative transmission of asymptomatic
+    frelasymp::Float64 = 0.26 ## relative transmission of asymptomatic
     ctstrat::Int8 = 0 ## strategy 
     fctcapture::Float16 = 0.0 ## how many symptomatic people identified
     fcontactst::Float16 = 0.0 ## fraction of contacts being isolated/quarantined
@@ -71,19 +75,28 @@ end
     vaccinating_appendix::Bool = false
     
     
-    hcw_vac_comp::Float64 = 0.90
+    hcw_vac_comp::Float64 = 0.70
     hcw_prop::Float64 = 0.05
     comor_comp::Float64 = 0.5
     eld_comp::Float64 = 0.70
     young_comp::Float64 = 0.22
     vac_period::Int64 = 28
     sec_dose_comp::Float64 = 0.7
-    daily_cov::Float64 = 0.008 ####also run for 0.008 per day
+    daily_cov::Float64 = 0.003 ####also run for 0.008 per day
     n_comor_comp::Float64 = 0.387
-    vac_efficacy::Float64 = 0.9  #### 50:5:80
+    fixed_cov::Float64 = 0.4
+
+    vac_eff_inf_1::Float64 = 0.0  #### 50:5:80
+    vac_eff_symp_1::Float64 = 0.0  #### 50:5:80
+    vac_eff_sev_1::Float64 = 0.0  #### 50:5:80
+
+    vac_eff_inf_2::Float64 = 0.0  #### 50:5:80
+    vac_eff_symp_2::Float64 = 0.0  #### 50:5:80
+    vac_eff_sev_2::Float64 = 0.0  #### 50:5:80
+
     days_to_protection::Array{Int64,1} = [14;7]
     vaccinating::Bool = false
-    days_before::Int64 = 48 ### six weeks of vaccination
+    days_before::Int64 = 0 ### six weeks of vaccination
 
 end
 
@@ -235,7 +248,7 @@ function runsim(simnum, ip::ModelParameters)
       
     end
     
-    R0 = length(findall(k -> k.wentTo == PRE && k.sickby == hh,humans))
+    R0 = length(findall(k -> k.sickby in hh,humans))/length(hh)
 
     #return (a=all, g1=ag1, g2=ag2, g3=ag3, g4=ag4, g5=ag5, infectors=infectors, vi = vac_idx,ve=vac_ef_i,com = comorb_idx,n_vac = n_vac,n_inf_vac = n_inf_vac,n_inf_nvac = n_inf_nvac)
     return (a=all, g1=ag1, g2=ag2, g3=ag3, g4=ag4, g5=ag5,g6=ag6, infectors=infectors, ve=vac_ef_i,
@@ -276,7 +289,7 @@ function main(ip::ModelParameters,sim::Int64)
     hmatrix = zeros(Int16, p.popsize, p.modeltime)
     initialize() # initialize population
     
-    h_init::Int64 = 0
+    #h_init::Int64 = 0
     # insert initial infected agents into the model
     # and setup the right swap function. 
     if p.calibration 
@@ -292,10 +305,11 @@ function main(ip::ModelParameters,sim::Int64)
         #insert_infected(REC, p.initialhi, 4)
     else
         #applying_vac(sim)
-        herd_immu_dist_2(sim)
-        h_init = insert_infected(LAT, p.initialinf, 4)[1]
+        N = herd_immu_dist_2(sim)
+        insert_infected(LAT, N, 4)[1]
+        
     end    
-    
+    h_init = findall(x->x.health  in (LAT,MILD,INF,PRE,ASYMP),humans)
     ## save the preisolation isolation parameters
     _fpreiso = p.fpreiso
     p.fpreiso = 0
@@ -390,7 +404,7 @@ function vac_selection()
     pos_eld = sample(pos_eld,Int(round(p.eld_comp*length(pos_eld))),replace=false)
 
     pos_n_com = findall(x->humans[x].comorbidity == 0 && !(x in pos_hcw) && humans[x].age<65 && humans[x].age>=18, 1:length(humans))
-    pos_n_com = sample(pos_n_com,Int(round(p.n_comor_comp*length(pos_n_com))),replace=false)
+    pos_n_com = sample(pos_n_com,Int(round(length(pos_n_com))),replace=false)
     #pos_y = findall(x-> humans[x].age<18, 1:length(humans))
     #pos_y = sample(pos_y,Int(round(p.young_comp*length(pos_y))),replace=false)
 
@@ -405,6 +419,14 @@ function vac_selection()
             exit(1)
         else
             aux = Int(round(p.cov_val*p.popsize))
+            v = v[1:aux]
+        end
+    else
+        if p.cov_val*p.popsize > length(v)
+            error("general population compliance is not enough to reach the coverage.")
+            exit(1)
+        else
+            aux = Int(round(p.fixed_cov*p.popsize))
             v = v[1:aux]
         end
     end
@@ -538,11 +560,15 @@ function vac_update(x::Human)
     if x.vac_status > 0 
         if x.days_vac == p.days_to_protection[x.vac_status]
             if x.vac_status == 1
-                red_com = p.vac_com_dec_min+rand()*(p.vac_com_dec_max-p.vac_com_dec_min)
-                x.vac_ef = ((1-red_com)^comm)*(p.vac_efficacy/2.0)
+                 
+                x.vac_eff_inf = ((1-x.vac_red)^comm)*p.vac_eff_inf_1
+                x.vac_eff_symp = ((1-x.vac_red)^comm)*p.vac_eff_symp_1
+                x.vac_eff_sev = ((1-x.vac_red)^comm)*p.vac_eff_sev_1
             else
-                red_com = p.vac_com_dec_min+rand()*(p.vac_com_dec_max-p.vac_com_dec_min)
-                x.vac_ef = ((1-red_com)^comm)*(p.vac_efficacy)
+                
+                x.vac_eff_inf = ((1-x.vac_red)^comm)*(p.vac_eff_inf_2-p.vac_eff_inf_1)+x.vac_eff_inf
+                x.vac_eff_symp = ((1-x.vac_red)^comm)*(p.vac_eff_symp_2-p.vac_eff_symp_1)+x.vac_eff_symp
+                x.vac_eff_sev = ((1-x.vac_red)^comm)*(p.vac_eff_sev_2-p.vac_eff_sev_1)+x.vac_eff_sev
             end
         end
         x.days_vac += 1
@@ -667,16 +693,19 @@ end =#
 function herd_immu_dist_2(sim::Int64)
     rng = MersenneTwister(200*sim)
     vec_n = zeros(Int32,6)
+    N = 1
     if p.herd == 5
         vec_n = [15; 143; 246;  70; 11; 15]
-        
+        N = 5
     elseif p.herd == 10
         vec_n = [32; 277; 489; 143; 25; 34]
-        
+        N = 9
     elseif p.herd == 20
         vec_n = [70; 519; 971; 308; 56; 76]
+        N = 14
     elseif p.herd == 3
         vec_n = [9; 86; 150; 42; 6; 7]
+        N = 1
     end
 
     for g = 1:6
@@ -690,7 +719,7 @@ function herd_immu_dist_2(sim::Int64)
         end
 
     end
-
+    return N
 end
 
 function _get_column_prevalence(hmatrix, hcol)
@@ -916,6 +945,7 @@ function initialize()
             x.isovia = :qu         
         end
         x.comorbidity = comorbidity(x.age)
+        x.vac_red = p.vac_com_dec_min+rand()*(p.vac_com_dec_max-p.vac_com_dec_min)
         # initialize the next day counts (this is important in initialization since dyntrans runs first)
         get_nextday_counts(x)
     end
@@ -1062,7 +1092,7 @@ function move_to_latent(x::Human)
     age_thres = [4, 19, 49, 64, 79, 999]
     g = findfirst(y-> y >= x.age, age_thres)
      
-    x.swap = rand() < (symp_pcts[g]) ? PRE : ASYMP
+    x.swap = rand() < (symp_pcts[g])*(1-x.vac_eff_symp) ? PRE : ASYMP
     x.wentTo = x.swap
     x.got_inf = true
     ## in calibration mode, latent people never become infectious.
@@ -1090,7 +1120,7 @@ function move_to_pre(x::Human)
     x.tis = 0   # reset time in state 
     x.exp = x.dur[3] # get the presymptomatic period
 
-    if rand() < (1-θ[x.ag])*(1-x.vac_ef)
+    if rand() < (1-θ[x.ag])*(1-x.vac_eff_sev)
         x.swap = INF
     else 
         x.swap = MILD
@@ -1439,7 +1469,7 @@ function dyntrans(sys_time, grps)
                     # tranmission dynamics
                         if  y.health == SUS && y.swap == UNDEF                  
                             beta = _get_betavalue(sys_time, xhealth)
-                            if rand() < beta*(1-y.vac_ef)
+                            if rand() < beta*(1-y.vac_eff_inf)
                                 totalinf += 1
                                 y.swap = LAT
                                 y.exp = y.tis   ## force the move to latent in the next time step.

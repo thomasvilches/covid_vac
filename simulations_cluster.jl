@@ -269,11 +269,11 @@ function create_folder(ip::cv.ModelParameters)
     #strategy = ip.apply_vac_com == true ? "T" : "UT"
     strategy = ip.vaccinating == true ? "$(ip.days_before)" : "NV"
     #RF = string("heatmap/results_prob_","$(replace(string(ip.β), "." => "_"))","_vac_","$(replace(string(ip.vaccine_ef), "." => "_"))","_herd_immu_","$(ip.herd)","_$strategy","cov_$(replace(string(ip.cov_val)))") ## 
-    main_folder = "/data/thomas-covid/new_vac_usa"
+    main_folder = "/data/thomas-covid/US_review_Dec"
     if ip.set_g_cov
-        RF = string(main_folder,"/results_prob_","$(replace(string(ip.β), "." => "_"))","_vac_","$(replace(string(ip.vac_efficacy), "." => "_"))","_herd_immu_","$(ip.herd)","_$strategy","_cov_$(replace(string(ip.cov_val), "." => "_"))") ## 
+        RF = string(main_folder,"/results_prob_","$(replace(string(ip.β), "." => "_"))","_vac_","$(replace(string(ip.vac_eff_symp_2), "." => "_"))","_vac_","$(replace(string(ip.vac_eff_inf_2), "." => "_"))","_herd_immu_","$(ip.herd)","_$strategy","_cov_$(replace(string(ip.cov_val), "." => "_"))") ## 
     else
-        RF = string(main_folder,"/results_prob_","$(replace(string(ip.β), "." => "_"))","_vac_","$(replace(string(ip.vac_efficacy), "." => "_"))","_herd_immu_","$(ip.herd)","_$strategy") ##  
+        RF = string(main_folder,"/results_prob_","$(replace(string(ip.β), "." => "_"))","_vac_","$(replace(string(ip.vac_eff_symp_2), "." => "_"))","_vac_","$(replace(string(ip.vac_eff_inf_2), "." => "_"))","_herd_immu_","$(ip.herd)","_$strategy") ##  
     end
     if !Base.Filesystem.isdir(RF)
         Base.Filesystem.mkpath(RF)
@@ -296,11 +296,19 @@ end
 
 
 ## now, running vaccine and herd immunity, focusing and not focusing in comorbidity, first  argument turns off vac
-function run_param_fix(herd_im_v = [0],fs=0.0,vaccinate = false,days_b = [0],vac_ef_v = [0.0],sc = false,cov = 0.0,nsims=1000)
-    for v_e = vac_ef_v, h_i = herd_im_v,days_b1 = days_b
-        bd = Dict(3=>0.0425,5=>0.0425, 10=>0.0448, 20=>0.0515)
+function run_param_fix(herd_im_v = [0],fs=0.0,vaccinate = false,ves1=0.0,vese1=0.0,vei1=0.0,ves2=0.0,vese2=0.0,vei2=0.0,vp = 28,sc = false,cov = 0.0,nsims=1000)
+    for h_i = herd_im_v
+        bd = Dict(5=>0.042, 10=>0.0445, 20=>0.05)
         b = bd[h_i]
-        @everywhere ip = cv.ModelParameters(β=$b,fsevere = $fs,vaccinating = $vaccinate, days_before = $days_b1,vac_efficacy = $v_e,herd = $(h_i),set_g_cov = $sc,cov_val = $cov)
+        @everywhere ip = cv.ModelParameters(β=$b,fsevere = $fs,fmild=$fs,vaccinating = $vaccinate,herd = $(h_i),set_g_cov = $sc,cov_val = $cov,
+        vac_eff_inf_1 = $vei1,
+        vac_eff_symp_1 = $ves1,
+        vac_eff_sev_1 = $vese1,
+        vac_eff_inf_2 = $vei2,
+        vac_eff_symp_2 = $ves2,
+        vac_eff_sev_2 = $vese2,
+        vac_period = $vp)
+
         folder = create_folder(ip)
 
         #println("$v_e $(ip.vaccine_ef)")
