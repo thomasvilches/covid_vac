@@ -99,6 +99,7 @@ end
     days_before::Int64 = 0 ### six weeks of vaccination
 
     start_several_inf::Bool = true
+    ignore_cal::Bool = false
     
     fd_1::Int64 = 30
     fd_2::Int64 = 5

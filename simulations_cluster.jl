@@ -27,7 +27,7 @@ addprocs(SlurmManager(250), N=8, topology=:master_worker, exeflags="--project=."
 function run(myp::cv.ModelParameters, nsims=1000, folderprefix="./")
     println("starting $nsims simulations...\nsave folder set to $(folderprefix)")
     dump(myp)
-    myp.calibration && error("can not run simulation, calibration is on.")
+    myp.calibration && !myp.ignore_cal && error("can not run simulation, calibration is on.")
     # will return 6 dataframes. 1 total, 4 age-specific 
     cdr = pmap(1:nsims) do x                 
             cv.runsim(x, myp)
@@ -318,9 +318,9 @@ end
 
 
 ## now, running vaccine and herd immunity, focusing and not focusing in comorbidity, first  argument turns off vac
-function run_calibration(beta = 0.0345,herd_im_v = 0,cali = false,fs = 0.0,nsims=1000)
+function run_calibration(beta = 0.0345,herd_im_v = 0,cali1=true,cali = false,several = false,fs = 0.0,nsims=1000)
    
-    @everywhere ip = cv.ModelParameters(β=$beta,herd = $herd_im_v,modeltime = 30,fsevere = $fs,fmild = $fs,calibration2 = $cali)
+    @everywhere ip = cv.ModelParameters(β=$beta,herd = $herd_im_v,modeltime = 30,fsevere = $fs,calibration=$cali1,calibration2 = $cali,start_several_inf=$several,ignore_cal=true)
     folder = create_folder(ip)
 
     #println("$v_e $(ip.vaccine_ef)")
