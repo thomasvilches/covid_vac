@@ -97,7 +97,10 @@ end
     days_to_protection::Array{Int64,1} = [14;7]
     vaccinating::Bool = false
     days_before::Int64 = 0 ### six weeks of vaccination
-
+    
+    fd_1::Int64 = 30
+    fd_2::Int64 = 5
+    sd1::Int64 = 25
 end
 
 Base.@kwdef mutable struct ct_data_collect
@@ -116,6 +119,7 @@ Base.show(io::IO, ::MIME"text/plain", z::Human) = dump(z)
 const humans = Array{Human}(undef, 0) 
 const p = ModelParameters()  ## setup default parameters
 const agebraks = @SVector [0:4, 5:19, 20:49, 50:64, 65:99]
+const agebraks_vac = @SVector [0:17,18:49, 50:64, 65:79, 80:99]
 const BETAS = Array{Float64, 1}(undef, 0) ## to hold betas (whether fixed or seasonal), array will get resized
 const ct_data = ct_data_collect()
 export ModelParameters, HEALTH, Human, humans, BETAS
@@ -146,7 +150,7 @@ function runsim(simnum, ip::ModelParameters)
 
      ##getting info about vac, comorbidity
    # vac_idx = [x.vac_status for x in humans]
-   vac_ef_i = [x.vac_ef for x in humans]
+   vac_ef_i = [x.vac_eff_inf for x in humans]
    # comorb_idx = [x.comorbidity for x in humans]
    # ageg = [x.ag for x = humans ]
 
@@ -178,6 +182,7 @@ function runsim(simnum, ip::ModelParameters)
     n_ncom_total = zeros(Int64,5)
 
     for x in humans
+        gg = findfirst(y-> x.age in y,agebraks_vac)
         if x.vac_status == 1
             if x.herd_im
                 n_vac_rec1 += 1
@@ -196,11 +201,11 @@ function runsim(simnum, ip::ModelParameters)
                 n_icu_vac1 += 1
             end
             if x.comorbidity == 1
-                n_com_vac1[x.ag] += 1
-                n_com_total[x.ag] += 1
+                n_com_vac1[gg] += 1
+                n_com_total[gg] += 1
             else
-                n_ncom_vac1[x.ag] += 1
-                n_ncom_total[x.ag] += 1
+                n_ncom_vac1[gg] += 1
+                n_ncom_total[gg] += 1
             end
         elseif x.vac_status == 2
             if x.herd_im
@@ -220,11 +225,11 @@ function runsim(simnum, ip::ModelParameters)
                 n_icu_vac2 += 1
             end
             if x.comorbidity == 1
-                n_com_vac2[x.ag] += 1
-                n_com_total[x.ag] += 1
+                n_com_vac2[gg] += 1
+                n_com_total[gg] += 1
             else
-                n_ncom_vac2[x.ag] += 1
-                n_ncom_total[x.ag] += 1
+                n_ncom_vac2[gg] += 1
+                n_ncom_total[gg] += 1
             end
         else
             if x.got_inf
@@ -240,9 +245,9 @@ function runsim(simnum, ip::ModelParameters)
             end
 
             if x.comorbidity == 1
-                n_com_total[x.ag] += 1
+                n_com_total[gg] += 1
             else
-                n_ncom_total[x.ag] += 1
+                n_ncom_total[gg] += 1
             end
         end
       
@@ -298,10 +303,10 @@ function main(ip::ModelParameters,sim::Int64)
     elseif p.calibration2 
         herd_immu_dist_2(sim)
         h_init = insert_infected(PRE, p.initialinf, 4)[1]
-    elseif p.vaccinating_appendix 
+    #= elseif p.vaccinating_appendix 
         applying_vac(sim)
         herd_immu_dist_2(sim)
-        h_init = insert_infected(LAT, p.initialinf, 4)[1]
+        h_init = insert_infected(LAT, p.initialinf, 4)[1] =#
         #insert_infected(REC, p.initialhi, 4)
     else
         #applying_vac(sim)
@@ -325,7 +330,7 @@ function main(ip::ModelParameters,sim::Int64)
         for i = 1:length(vac_ind2)
             vac_ind[i] = vac_ind2[i]
         end
-        v1,v2 = vac_index(length(vac_ind))
+        v1,v2 = vac_index_new(length(vac_ind))
         
         time_vac::Int64 = 1
         
@@ -341,18 +346,18 @@ function main(ip::ModelParameters,sim::Int64)
                 for x in humans
                     vac_update(x)
                 end
-                if time_vac_aux%6 == 0
+                #= if time_vac_aux%6 == 0
                     for x in humans
                         vac_update(x)
                     end
-                end
+                end =#
             end
         end        
         for st = 1:p.modeltime
             # start of day
             #println("$st")
             if time_vac<=(length(v1)-1)
-                if st%7 > 0
+                #if st%7 > 0
                     vac_ind2 = vac_time!(vac_ind,time_vac,v1,v2)
                     #vac_ind = [vac_ind vac_ind2]
                     resize!(vac_ind, length(vac_ind2))
@@ -360,7 +365,7 @@ function main(ip::ModelParameters,sim::Int64)
                         vac_ind[i] = vac_ind2[i]
                     end
                     time_vac += 1
-                end
+                #end
             end
             #=if st == p.tpreiso ## time to introduce testing
             global  p.fpreiso = _fpreiso
@@ -438,7 +443,7 @@ end
 function vac_index(l::Int64)
 
     daily_vac::Int64 = Int(round(p.daily_cov*p.popsize))
-    prop::Float64 = 2/3
+    prop::Float64 = 5/30
 
     if p.vac_period*daily_vac < l
         n1 = Int(ceil((l-p.vac_period*daily_vac)/(daily_vac*prop)))
@@ -489,6 +494,95 @@ function vac_index(l::Int64)
     return v1,v2
 end
 
+
+function vac_index_new(l::Int64)
+
+
+    v1 = Array{Int64,1}(undef,p.modeltime);
+    v2 = Array{Int64,1}(undef,p.modeltime);
+    n::Int64 = p.fd_2+p.sd1
+    v1_aux::Bool = false
+   
+    
+    v2_aux::Bool = false
+    kk::Int64 = 2
+
+    #= if p.single_dose
+        for i = 1:p.modeltime
+            v1[i] = -1
+            v2[i] = -1
+           
+        end
+        v1[1] = 0
+        while !v1_aux
+            v1[kk] = v1[kk-1]+n
+            if v1[kk] >= l
+                v1[kk] = l
+                v1_aux = true
+            end
+            kk += 1
+
+        end
+        a = findfirst(x-> x == l, v1)
+
+        for i = (a+1):length(v1)
+            v1[i] = -1
+        end
+        a = a+1
+    else =#
+        for i = 1:p.modeltime
+            v1[i] = -1
+            v2[i] = -1
+        end
+
+        v1[1] = 0
+        v2[1] = 0
+        for i = 2:(p.vac_period+1)
+            v1[i] = (i-1)*p.fd_1
+            v2[i] = 0
+        end
+
+        kk = p.vac_period+2
+       
+
+        eligible::Int64 = 0
+        last_v2::Int64 = 0
+        while !v1_aux || !v2_aux
+
+            eligible = eligible+(v1[kk-p.vac_period]-v1[kk-p.vac_period-1])
+            v2_1 = min(p.sd1,eligible-last_v2)
+
+            v2[kk] = last_v2+v2_1
+            last_v2 = v2[kk]
+            n_aux = n-v2_1
+            v1[kk] = v1[kk-1]+n_aux
+
+            
+            if v1[kk] >= l
+                v1[kk] = l
+                v1_aux = true
+            end
+
+            if v2[kk] >= l
+                v2[kk] = l
+                v2_aux = true
+            end
+            kk += 1
+
+        end
+
+        a = findfirst(x-> x == l, v1)
+
+        for i = (a+1):length(v1)
+            v1[i] = -1
+        end
+
+
+        a = findfirst(x-> x == -1, v2)
+    #end
+
+    return v1[1:(a-1)],v2[1:(a-1)]
+end
 
 function vac_time!(vac_ind::Array{Int64,1},t::Int64,n_1_dose::Array{Int64,1},n_2_dose::Array{Int64,1})
     
@@ -699,10 +793,10 @@ function herd_immu_dist_2(sim::Int64)
         N = 5
     elseif p.herd == 10
         vec_n = [32; 277; 489; 143; 25; 34]
-        N = 9
+        N = 10
     elseif p.herd == 20
         vec_n = [70; 519; 971; 308; 56; 76]
-        N = 14
+        N = 15
     elseif p.herd == 3
         vec_n = [9; 86; 150; 42; 6; 7]
         N = 1
@@ -795,7 +889,7 @@ function comorbidity(ag::Int16)
 end
 export comorbidity
 
-
+#= 
 function applying_vac(sim::Int64)
     rng = MersenneTwister(100*sim)
     if p.apply_vac
@@ -922,7 +1016,7 @@ function applying_vac(sim::Int64)
         end
     end
 end
-export applying_vac
+export applying_vac =#
 
 
 
@@ -938,6 +1032,7 @@ function initialize()
         a = [4;19;49;64;79;999]
         g = findfirst(y->y>=x.age,a)
         x.ag_new = g
+
         x.exp = 999  ## susceptible people don't expire.
         x.dur = sample_epi_durations() # sample epi periods   
         if rand() < p.eldq && x.ag == p.eldqag   ## check if elderly need to be quarantined.
@@ -1175,14 +1270,19 @@ function move_to_inf(x::Human)
  
     # h = prob of hospital, c = prob of icu AFTER hospital    
     
-    h = x.comorbidity == 1 ? 0.4 : 0.09
-    c = x.comorbidity == 1 ? 0.33 : 0.25
+    
+
+    h = [0.016;0.016;0.163;0.205;0.296;0.313]
+    c = [0.001;0.001;0.029;0.047;0.093;0.063]
+
+    #h = x.comorbidity == 1 ? 0.4 : 0.09
+    #c = x.comorbidity == 1 ? 0.33 : 0.25
     
     mh = [0.01/5, 0.01/5, 0.0135/3, 0.01225/1.5, 0.04/2]     # death rate for severe cases.
     
     if p.calibration && !p.calibration2
-        h =  0#, 0, 0, 0)
-        c =  0#, 0, 0, 0)
+        h =  [0;0;0;0;0;0]#0#, 0, 0, 0)
+        c =  [0;0;0;0;0;0]#0#, 0, 0, 0)
         mh = (0, 0, 0, 0, 0)
     end
 
@@ -1191,9 +1291,9 @@ function move_to_inf(x::Human)
     x.health = INF
     x.swap = UNDEF
     x.tis = 0 
-    if rand() < h     # going to hospital or ICU but will spend delta time transmissing the disease with full contacts 
+    if rand() < h[x.ag]     # going to hospital or ICU but will spend delta time transmissing the disease with full contacts 
         x.exp = time_to_hospital    
-        x.swap = rand() < c ? ICU : HOS        
+        x.swap = rand() < c[x.ag] ? ICU : HOS        
     else ## no hospital for this lucky (but severe) individual 
         if rand() < mh[x.ag]
             x.exp = x.dur[4]  
@@ -1223,10 +1323,12 @@ end
 function move_to_hospicu(x::Human)   
     #death prob taken from https://www.cdc.gov/nchs/nvss/vsrr/covid_weekly/index.htm#Comorbidities
     # on May 31th, 2020
-    age_thres = [24;34;44;54;64;74;84;999]
-    g = findfirst(y-> y >= x.age,age_thres)
-    mh = [0.0005, 0.0022, 0.0057, 0.0160, 0.0401, 0.0696, 0.0893, 0.11]
-    mc = [0.0009,0.0045,0.0115,0.0319,0.0801,0.1392,0.1786,0.22]
+    #= age_thres = [24;34;44;54;64;74;84;999]
+    g = findfirst(y-> y >= x.age,age_thres) =#
+    mh = [0.001, 0.001, 0.002, 0.0140, 0.035, 0.105]
+    
+    
+    mc = [0.002,0.002,0.0022,0.016,0.07,0.14]
 
     psiH = Int(round(rand(Distributions.truncated(Gamma(4.5, 2.75), 8, 17))))
     psiC = Int(round(rand(Distributions.truncated(Gamma(4.5, 2.75), 8, 17)))) + 2
@@ -1241,7 +1343,7 @@ function move_to_hospicu(x::Human)
 
     if swaphealth == HOS
         x.hospicu = 1 
-        if rand() < mh[g] ## person will die in the hospital 
+        if rand() < mh[x.ag] ## person will die in the hospital 
             x.exp = muH 
             x.swap = DED
         else 
@@ -1251,7 +1353,7 @@ function move_to_hospicu(x::Human)
     end
     if swaphealth == ICU
         x.hospicu = 2         
-        if rand() < mc[g] ## person will die in the ICU 
+        if rand() < mc[x.ag] ## person will die in the ICU 
             x.exp = muC
             x.swap = DED
         else 
