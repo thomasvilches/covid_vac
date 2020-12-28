@@ -97,6 +97,8 @@ end
     days_to_protection::Array{Int64,1} = [14;7]
     vaccinating::Bool = false
     days_before::Int64 = 0 ### six weeks of vaccination
+
+    start_several_inf::Bool = true
     
     fd_1::Int64 = 30
     fd_2::Int64 = 5
@@ -297,22 +299,23 @@ function main(ip::ModelParameters,sim::Int64)
     #h_init::Int64 = 0
     # insert initial infected agents into the model
     # and setup the right swap function. 
-    if p.calibration 
-         herd_immu_dist_2(sim)
-         h_init = insert_infected(PRE, p.initialinf, 4)[1]
-    elseif p.calibration2 
+    if p.calibration && !p.start_several_inf
         herd_immu_dist_2(sim)
         h_init = insert_infected(PRE, p.initialinf, 4)[1]
-    #= elseif p.vaccinating_appendix 
+            #insert_infected(REC, p.initialhi, 4)
+    elseif p.start_several_inf
+        N=herd_immu_dist_4(sim)
+        insert_infected(LAT, N, 4)[1]
+        h_init = findall(x->x.health in (MILD,INF,LAT,PRE,ASYMP),humans)
+
+    elseif p.vaccinating_appendix 
         applying_vac(sim)
         herd_immu_dist_2(sim)
-        h_init = insert_infected(LAT, p.initialinf, 4)[1] =#
-        #insert_infected(REC, p.initialhi, 4)
+        h_init = insert_infected(LAT, p.initialinf, 4)[1]
     else
         #applying_vac(sim)
-        N = herd_immu_dist_2(sim)
-        insert_infected(LAT, N, 4)[1]
-        
+        herd_immu_dist_2(sim)
+        h_init = insert_infected(LAT, p.initialinf, 4)[1]
     end    
     h_init = findall(x->x.health  in (LAT,MILD,INF,PRE,ASYMP),humans)
     ## save the preisolation isolation parameters
