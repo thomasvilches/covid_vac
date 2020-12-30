@@ -56,12 +56,12 @@ function run(myp::cv.ModelParameters, nsims=1000, folderprefix="./")
     #c1 = Symbol.((:LAT, :ASYMP, :INF, :IISO, :HOS, :ICU, :DED), :_INC)
     #c2 = Symbol.((:LAT, :ASYMP, :INF, :IISO, :HOS, :ICU, :DED), :_PREV)
     c1 = Symbol.((:LAT, :HOS, :ICU, :DED), :_INC)
-    c2 = Symbol.((:LAT, :HOS, :ICU, :DED), :_PREV)
+    #c2 = Symbol.((:LAT, :HOS, :ICU, :DED), :_PREV)
    for (k, df) in mydfs
         println("saving dataframe sim level: $k")
         # simulation level, save file per health status, per age group
-        for c in vcat(c1..., c2...)
-        #for c in vcat(c1...)
+        #for c in vcat(c1..., c2...)
+        for c in vcat(c1...)
         #for c in vcat(c2...)
             udf = unstack(df, :time, :sim, c) 
             fn = string("$(folderprefix)/simlevel_", lowercase(string(c)), "_", k, ".dat")
@@ -88,7 +88,7 @@ function run(myp::cv.ModelParameters, nsims=1000, folderprefix="./")
 
     close(fv)=#
     #############saving vac ef
-    println("saving vac effcicacy")
+    #= println("saving vac effcicacy")
     vac_ef_file = string(folderprefix,"/vac_ef.dat")
     fve = open(vac_ef_file,"w")
    
@@ -99,7 +99,7 @@ function run(myp::cv.ModelParameters, nsims=1000, folderprefix="./")
         println(fve,"")
     end
 
-    close(fve)
+    close(fve) =#
 
     #######saving commorbidity status
     #=println("saving commorbidity status")
@@ -133,7 +133,8 @@ function run(myp::cv.ModelParameters, nsims=1000, folderprefix="./")
     n_inf_nvac = [cdr[i].n_inf_nvac for i=1:nsims]
     n_hosp_nvac = [cdr[i].n_hosp_nvac for i=1:nsims]
     n_icu_nvac = [cdr[i].n_icu_nvac for i=1:nsims]
-    R0 = [cdr[i].R0 for i=1:nsims]
+    R0 = hcat([cdr[i].R0 for i=1:nsims]...)
+    R0 = R0'
     #=
     writedlm(string(folderprefix,"/general_vac_info_cov_$(replace(string(myp.cov_val), "." => "_"))_vac_ef_$(replace(string(myp.vaccine_ef), "." => "_")).dat"),[n_vac_sus1 n_vac_rec1 n_inf_vac1 n_dead_vac1 n_hosp_vac1 n_icu_vac1 n_vac_sus2 n_vac_rec2 n_inf_vac2 n_dead_vac2 n_hosp_vac2 n_icu_vac2 n_inf_nvac n_dead_nvac n_hosp_nvac n_icu_nvac])
     writedlm(string(folderprefix,"/com_vac_cov_$(replace(string(myp.cov_val), "." => "_"))_vac_ef_$(replace(string(myp.vaccine_ef), "." => "_")).dat"),[cdr[i].com_v for i=1:nsims])
@@ -282,11 +283,22 @@ function create_folder(ip::cv.ModelParameters)
 end
 
 ## now, running vaccine and herd immunity, focusing and not focusing in comorbidity, first  argument turns off vac
-function run_param(b,herd_im_v = [0],fs=0.0,vaccinate = false,days_b = [0],vac_ef_v = [0.0],nsims=1000)
-    for v_e = vac_ef_v, h_i = herd_im_v,days_b1 = days_b
-        #bd = Dict(5=>0.074, 10=>0.076, 20=>0.089)
-        #b = bd[h_i]
-        @everywhere ip = cv.ModelParameters(β=$b,fsevere = $fs,vaccinating = $vaccinate, days_before = $days_b1,vac_efficacy = $v_e,herd = $(h_i))
+
+## now, running vaccine and herd immunity, focusing and not focusing in comorbidity, first  argument turns off vac
+function run_param(beta,herd_im_v = [0],fs=0.0,init=3,vaccinate = false,ves1=0.0,vese1=0.0,vei1=0.0,ves2=0.0,vese2=0.0,vei2=0.0,vp = 28,sc = false,cov = 0.0,nsims=1000)
+    for h_i = herd_im_v
+        #bd = Dict(5=>0.041, 10=>0.0445, 20=>0.05)
+        b = beta
+        @everywhere ip = cv.ModelParameters(β=$b,fsevere = $fs,fmild=$fs,vaccinating = $vaccinate,herd = $(h_i),set_g_cov = $sc,cov_val = $cov,
+        vac_eff_inf_1 = $vei1,
+        vac_eff_symp_1 = $ves1,
+        vac_eff_sev_1 = $vese1,
+        vac_eff_inf_2 = $vei2,
+        vac_eff_symp_2 = $ves2,
+        vac_eff_sev_2 = $vese2,
+        vac_period = $vp,
+        initialinf = $init)
+
         folder = create_folder(ip)
 
         #println("$v_e $(ip.vaccine_ef)")
@@ -298,7 +310,7 @@ end
 ## now, running vaccine and herd immunity, focusing and not focusing in comorbidity, first  argument turns off vac
 function run_param_fix(herd_im_v = [0],fs=0.0,vaccinate = false,ves1=0.0,vese1=0.0,vei1=0.0,ves2=0.0,vese2=0.0,vei2=0.0,vp = 28,sc = false,cov = 0.0,nsims=1000)
     for h_i = herd_im_v
-        bd = Dict(5=>0.042, 10=>0.0445, 20=>0.05)
+        bd = Dict(5=>0.0395, 10=>0.042, 20=>0.0465)
         b = bd[h_i]
         @everywhere ip = cv.ModelParameters(β=$b,fsevere = $fs,fmild=$fs,vaccinating = $vaccinate,herd = $(h_i),set_g_cov = $sc,cov_val = $cov,
         vac_eff_inf_1 = $vei1,
@@ -307,7 +319,8 @@ function run_param_fix(herd_im_v = [0],fs=0.0,vaccinate = false,ves1=0.0,vese1=0
         vac_eff_inf_2 = $vei2,
         vac_eff_symp_2 = $ves2,
         vac_eff_sev_2 = $vese2,
-        vac_period = $vp)
+        vac_period = $vp,
+        initialinf = 3)
 
         folder = create_folder(ip)
 
@@ -320,7 +333,7 @@ end
 ## now, running vaccine and herd immunity, focusing and not focusing in comorbidity, first  argument turns off vac
 function run_calibration(beta = 0.0345,herd_im_v = 0,cali1=true,cali = false,several = false,fs = 0.0,nsims=1000)
    
-    @everywhere ip = cv.ModelParameters(β=$beta,herd = $herd_im_v,modeltime = 30,fsevere = $fs,calibration=$cali1,calibration2 = $cali,start_several_inf=$several,ignore_cal=true)
+    @everywhere ip = cv.ModelParameters(β=$beta,herd = $herd_im_v,modeltime = 30,initialinf = 2,fsevere = $fs,fmild=$fs,calibration=$cali1,calibration2 = $cali,start_several_inf=$several,ignore_cal=true)
     folder = create_folder(ip)
 
     #println("$v_e $(ip.vaccine_ef)")

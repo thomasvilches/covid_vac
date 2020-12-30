@@ -104,6 +104,8 @@ end
     fd_1::Int64 = 30
     fd_2::Int64 = 5
     sd1::Int64 = 25
+
+    days_Rt::Array{Int64,1} = [100;200;300]
 end
 
 Base.@kwdef mutable struct ct_data_collect
@@ -122,7 +124,7 @@ Base.show(io::IO, ::MIME"text/plain", z::Human) = dump(z)
 const humans = Array{Human}(undef, 0) 
 const p = ModelParameters()  ## setup default parameters
 const agebraks = @SVector [0:4, 5:19, 20:49, 50:64, 65:99]
-const agebraks_vac = @SVector [0:17,18:49, 50:64, 65:79, 80:99]
+const agebraks_vac = @SVector [0:4,5:19,20:49, 50:64, 65:79, 80:99]
 const BETAS = Array{Float64, 1}(undef, 0) ## to hold betas (whether fixed or seasonal), array will get resized
 const ct_data = ct_data_collect()
 export ModelParameters, HEALTH, Human, humans, BETAS
@@ -177,12 +179,12 @@ function runsim(simnum, ip::ModelParameters)
     n_hosp_vac2::Int64 = 0
     n_icu_vac2::Int64 = 0
 
-    n_com_vac1 = zeros(Int64,5)
-    n_ncom_vac1 = zeros(Int64,5)
-    n_com_vac2 = zeros(Int64,5)
-    n_ncom_vac2 = zeros(Int64,5)
-    n_com_total = zeros(Int64,5)
-    n_ncom_total = zeros(Int64,5)
+    n_com_vac1 = zeros(Int64,6)
+    n_ncom_vac1 = zeros(Int64,6)
+    n_com_vac2 = zeros(Int64,6)
+    n_ncom_vac2 = zeros(Int64,6)
+    n_com_total = zeros(Int64,6)
+    n_ncom_total = zeros(Int64,6)
 
     for x in humans
         gg = findfirst(y-> x.age in y,agebraks_vac)
@@ -256,8 +258,13 @@ function runsim(simnum, ip::ModelParameters)
       
     end
     
-    R0 = length(findall(k -> k.sickby in hh,humans))/length(hh)
+    R0 = zeros(Float64,size(hh,1))
 
+    for i = 1:size(hh,1)
+        if length(hh[i]) > 0
+            R0[i] = length(findall(k -> k.sickby in hh[i],humans))/length(hh[i])
+        end
+    end
     #return (a=all, g1=ag1, g2=ag2, g3=ag3, g4=ag4, g5=ag5, infectors=infectors, vi = vac_idx,ve=vac_ef_i,com = comorb_idx,n_vac = n_vac,n_inf_vac = n_inf_vac,n_inf_nvac = n_inf_nvac)
     return (a=all, g1=ag1, g2=ag2, g3=ag3, g4=ag4, g5=ag5,g6=ag6, infectors=infectors, ve=vac_ef_i,
     com_v1 = n_com_vac1,ncom_v1 = n_ncom_vac1,
@@ -305,8 +312,8 @@ function main(ip::ModelParameters,sim::Int64)
         h_init = insert_infected(PRE, p.initialinf, 4)[1]
             #insert_infected(REC, p.initialhi, 4)
     elseif p.start_several_inf
-        N=herd_immu_dist_4(sim)
-        insert_infected(LAT, N, 4)[1]
+        N = herd_immu_dist_4(sim)
+        insert_infected(PRE, p.initialinf, 4)[1]
         h_init = findall(x->x.health in (MILD,INF,LAT,PRE,ASYMP),humans)
 
     elseif p.vaccinating_appendix 
@@ -326,6 +333,7 @@ function main(ip::ModelParameters,sim::Int64)
     # split population in agegroups 
     grps = get_ag_dist()
 
+    h_init = [h_init]
     # start the time loop
     if p.vaccinating
 
@@ -376,6 +384,11 @@ function main(ip::ModelParameters,sim::Int64)
             end=#
             _get_model_state(st, hmatrix) ## this datacollection needs to be at the start of the for loop
             dyntrans(st, grps)
+
+            if st in p.days_Rt
+                aux1 = findall(x->x.swap == LAT,humans)
+                h_init = vcat(h_init,[aux1])
+            end
             sw = time_update()
             # end of day
         end
@@ -388,6 +401,12 @@ function main(ip::ModelParameters,sim::Int64)
             end=#
             _get_model_state(st, hmatrix) ## this datacollection needs to be at the start of the for loop
             dyntrans(st, grps)
+
+            if st in p.days_Rt
+                aux1 = findall(x->x.swap == LAT,humans)
+                h_init = vcat(h_init,[aux1])
+            end
+
             sw = time_update()
             # end of day
         end
@@ -816,6 +835,48 @@ function herd_immu_dist_2(sim::Int64)
             humans[i].herd_im = true
         end
 
+    end
+    return N
+end
+
+
+function herd_immu_dist_4(sim::Int64)
+    rng = MersenneTwister(200*sim)
+    vec_n = zeros(Int32,6)
+    N::Int64 = 0
+    if p.herd == 5
+        vec_n = [9; 148; 262;  68; 4; 9]
+        N = 5
+
+    elseif p.herd == 10
+        vec_n = [32; 279; 489; 143; 24; 33]
+
+        N = 10
+
+    elseif p.herd == 20
+        vec_n = [71; 531; 962; 302; 57; 77]
+
+        N = 15
+    elseif p.herd == 30
+        vec_n = [105; 757; 1448; 481; 87; 122]
+
+        N = 16
+    elseif p.herd == 0
+        vec_n = [0;0;0;0;0;0]
+       
+    else
+        error("No herd immunity")
+    end
+
+    for g = 1:6
+        pos = findall(y->y.ag_new == g && y.health == SUS,humans)
+        n_dist = min(length(pos),vec_n[g])
+        pos2 = sample(rng,pos,n_dist,replace=false)
+        for i = pos2
+            move_to_recovered(humans[i])
+            humans[i].sickfrom = INF
+            humans[i].herd_im = true
+        end
     end
     return N
 end
@@ -1276,17 +1337,17 @@ function move_to_inf(x::Human)
     
     
 
-    h = [0.016;0.016;0.163;0.205;0.296;0.313]
-    c = [0.001;0.001;0.029;0.047;0.093;0.063]
+    #h = [0.016;0.016;0.163;0.205;0.296;0.313]
+    #c = [0.001;0.001;0.029;0.047;0.093;0.063]
 
-    #h = x.comorbidity == 1 ? 0.4 : 0.09
-    #c = x.comorbidity == 1 ? 0.33 : 0.25
+    h = x.comorbidity == 1 ? 0.376 : 0.09
+    c = x.comorbidity == 1 ? 0.33 : 0.25
     
     mh = [0.01/5, 0.01/5, 0.0135/3, 0.01225/1.5, 0.04/2]     # death rate for severe cases.
     
     if p.calibration && !p.calibration2
-        h =  [0;0;0;0;0;0]#0#, 0, 0, 0)
-        c =  [0;0;0;0;0;0]#0#, 0, 0, 0)
+        h =  0#[0;0;0;0;0;0]#0#, 0, 0, 0)
+        c =  0#[0;0;0;0;0;0]#0#, 0, 0, 0)
         mh = (0, 0, 0, 0, 0)
     end
 
@@ -1295,9 +1356,9 @@ function move_to_inf(x::Human)
     x.health = INF
     x.swap = UNDEF
     x.tis = 0 
-    if rand() < h[x.ag]     # going to hospital or ICU but will spend delta time transmissing the disease with full contacts 
+    if rand() < h     # going to hospital or ICU but will spend delta time transmissing the disease with full contacts 
         x.exp = time_to_hospital    
-        x.swap = rand() < c[x.ag] ? ICU : HOS        
+        x.swap = rand() < c ? ICU : HOS        
     else ## no hospital for this lucky (but severe) individual 
         if rand() < mh[x.ag]
             x.exp = x.dur[4]  
