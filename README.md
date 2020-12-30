@@ -41,4 +41,4 @@ hos = hospitalization, icu = icu hospitalization, lat = latent. It has a "headin
 File "general_vac_info.dat" gives us, for each simulation the total number of
 vaccines given to susceptibles, vaccines given to recovered (herd immunity), infected individuals that were vaccinated, infected individuals that were not vaccinated, dead individuals that were vaccinated, dead individuals that were not vaccinated, non-icu hospitalized individuals that were vaccinated, non-icu hospitalized individuals that were not vaccinated, icu hospitalized individuals that were vaccinated, icu hospitalized individuals that were not vaccinated
 
-The file run_scen_review.jl runs all the needed scenarios.
+The file run_scen_review.jl runs all the needed.
