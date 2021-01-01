@@ -311,7 +311,9 @@ end
 function run_param_fix(herd_im_v = [0],fs=0.0,vaccinate = false,ves1=0.0,vese1=0.0,vei1=0.0,ves2=0.0,vese2=0.0,vei2=0.0,vp = 28,sc = false,cov = 0.0,nsims=1000)
     for h_i = herd_im_v
         bd = Dict(5=>0.0395, 10=>0.042, 20=>0.0465)
+        init_con = Dict(5=>3, 10=>4, 20=>6)
         b = bd[h_i]
+        ic = init_con[h_i]
         @everywhere ip = cv.ModelParameters(β=$b,fsevere = $fs,fmild=$fs,vaccinating = $vaccinate,herd = $(h_i),set_g_cov = $sc,cov_val = $cov,
         vac_eff_inf_1 = $vei1,
         vac_eff_symp_1 = $ves1,
@@ -320,7 +322,7 @@ function run_param_fix(herd_im_v = [0],fs=0.0,vaccinate = false,ves1=0.0,vese1=0
         vac_eff_symp_2 = $ves2,
         vac_eff_sev_2 = $vese2,
         vac_period = $vp,
-        initialinf = 3)
+        initialinf = $ic)
 
         folder = create_folder(ip)
 

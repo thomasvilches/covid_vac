@@ -450,7 +450,7 @@ function vac_selection()
             v = v[1:aux]
         end
     else
-        if p.cov_val*p.popsize > length(v)
+        if p.fixed_cov*p.popsize > length(v)
             error("general population compliance is not enough to reach the coverage.")
             exit(1)
         else
@@ -552,7 +552,7 @@ function vac_index_new(l::Int64)
             v1[i] = -1
         end
         a = a+1
-    else =#
+    else  =#
         for i = 1:p.modeltime
             v1[i] = -1
             v2[i] = -1
@@ -1390,10 +1390,15 @@ function move_to_hospicu(x::Human)
     # on May 31th, 2020
     #= age_thres = [24;34;44;54;64;74;84;999]
     g = findfirst(y-> y >= x.age,age_thres) =#
-    mh = [0.001, 0.001, 0.002, 0.0140, 0.035, 0.105]
-    
-    
-    mc = [0.002,0.002,0.0022,0.016,0.07,0.14]
+
+    aux = [0:4, 5:19, 20:44, 45:54, 55:64, 65:74, 75:85, 85:99]
+
+    mh = [0.001, 0.001, 0.0015, 0.0065, 0.02, 0.038, 0.0735, 0.1885]
+    mc = [0.002,0.002,0.0022, 0.008, 0.022, 0.04, 0.08, 0.2]
+
+    gg = findfirst(y-> x.age in y,aux)
+    #mh = [0.001, 0.001, 0.002, 0.0140, 0.035, 0.105]
+    #mc = [0.002,0.002,0.0022,0.016,0.07,0.14]
 
     psiH = Int(round(rand(Distributions.truncated(Gamma(4.5, 2.75), 8, 17))))
     psiC = Int(round(rand(Distributions.truncated(Gamma(4.5, 2.75), 8, 17)))) + 2
@@ -1408,7 +1413,7 @@ function move_to_hospicu(x::Human)
 
     if swaphealth == HOS
         x.hospicu = 1 
-        if rand() < mh[x.ag] ## person will die in the hospital 
+        if rand() < mh[gg] ## person will die in the hospital 
             x.exp = muH 
             x.swap = DED
         else 
@@ -1418,7 +1423,7 @@ function move_to_hospicu(x::Human)
     end
     if swaphealth == ICU
         x.hospicu = 2         
-        if rand() < mc[x.ag] ## person will die in the ICU 
+        if rand() < mc[gg] ## person will die in the ICU 
             x.exp = muC
             x.swap = DED
         else 
